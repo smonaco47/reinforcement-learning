@@ -1,33 +1,10 @@
 from tensorforce import Agent, Environment
-from datetime import datetime
 
-environment = Environment.create(
-    environment='gym', level='LunarLander-v2', max_episode_timesteps=100
-)
+from agents.hyperparameters import Hyperparameters
+from agents.results import Results
 
 
-# Instantiate a Tensorforce agent
-agent = Agent.create(
-    agent='tensorforce',
-    environment=environment,
-    memory=10000,
-    update=dict(unit='timesteps', batch_size=128),
-    optimizer=dict(type='adam', learning_rate=dict(
-        type='linear', unit='timesteps', num_steps=50000,
-        initial_value=1e-3, final_value=1e-5
-    )),
-    exploration=dict(
-        type='linear', unit='timesteps', num_steps=10000,
-        initial_value=0.1, final_value=0.01
-    ),
-    policy=dict(network='auto'),
-    objective='policy_gradient',
-    reward_estimation=dict(horizon=30)
-)
-
-rewards = []
-num_iterations = 10000
-for i in range(num_iterations):
+def run_episode(agent, environment, render=False):
     states = environment.reset()
     terminal = False
 
@@ -38,33 +15,74 @@ for i in range(num_iterations):
         agent.observe(terminal=terminal, reward=reward)
         sum_rewards += reward
 
-    rewards.append(sum_rewards)
+        if (render):
+            environment.environment.render()
 
-    if (i % 500) == 0 and i > 1:
-        print(f"{datetime.now().strftime('%H:%M:%S')}\t{i}\t{sum(rewards[-11:-1])/10}")
+    return sum_rewards
 
-    if sum_rewards >= 200:
-        print(f"Solved in {i} iterations!")
-        break
 
-input("Finished training, press here to continue...")
+def train_model(environment, params: Hyperparameters, max_iterations=10000, goal_reward=200, show_final=False):
+    result = Results()
 
-for _ in range(10):
+    agent = create_agent(environment, params)
 
-    states = environment.reset()
-    terminal = False
+    for i in range(max_iterations):
 
-    sum_rewards = 0.0
-    while not terminal:
-        environment.environment.render()
-        actions = agent.act(states=states)
-        states, terminal, reward = environment.execute(actions=actions)
-        agent.observe(terminal=terminal, reward=reward)
-        sum_rewards += reward
+        if (i % 500) == 0 and i > 1:
+            result.print_summary()
 
-    rewards.append(sum_rewards)
+        episode_reward = run_episode(agent, environment)
+        result.add_result(episode_reward)
 
-print(f"Final\t{sum(rewards[-11:-1])/10}")
+        if episode_reward >= goal_reward:
+            print(f"Solved in {i} iterations!")
 
-agent.close()
-environment.close()
+    if show_final:
+        input("Finished training, press here to continue...")
+        for _ in range(5):
+            episode_reward = run_episode(agent, environment, render=True)
+            result.add_result(episode_reward)
+        result.print_summary()
+
+    agent.close()
+    return result
+
+
+def create_agent(environment, params):
+    lr_dict = dict(
+        type=params.lr_type, unit='timesteps', num_steps=params.lr_steps,
+        initial_value=params.lr_initial
+    )
+    if params.lr_type == 'linear':
+        lr_dict["final_value"] = params.lr_final
+    else:
+        lr_dict["decay_rate"] = params.lr_decay
+    explore_dict = dict(
+        type=params.explore_type, unit='timesteps', num_steps=params.explore_steps,
+        initial_value=params.explore_initial, final_value=params.explore_final
+    )
+    if params.explore_type == 'linear':
+        explore_dict["final_value"] = params.explore_final
+    else:
+        explore_dict["decay_rate"] = params.explore_decay
+    agent = Agent.create(
+        agent='tensorforce',
+        environment=environment,
+        memory=params.memory,
+        update=dict(unit='timesteps', batch_size=params.batch_size),
+        optimizer=dict(type='adam', learning_rate=lr_dict),
+        exploration=explore_dict,
+        policy=dict(network='auto'),
+        objective='policy_gradient',
+        reward_estimation=dict(horizon=params.horizon)
+    )
+    return agent
+
+
+if __name__ == "__main__":
+    lander_env = Environment.create(
+        environment='gym', level='LunarLander-v2', max_episode_timesteps=100
+    )
+    params = Hyperparameters()
+    train_model(lander_env, params, show_final=True)
+    lander_env.close()
