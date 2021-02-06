@@ -57,6 +57,7 @@ def create_agent(environment, params):
         lr_dict["final_value"] = params.lr_final
     else:
         lr_dict["decay_rate"] = params.lr_decay
+
     explore_dict = dict(
         type=params.explore_type, unit='timesteps', num_steps=params.explore_steps,
         initial_value=params.explore_initial, final_value=params.explore_final
@@ -65,6 +66,7 @@ def create_agent(environment, params):
         explore_dict["final_value"] = params.explore_final
     else:
         explore_dict["decay_rate"] = params.explore_decay
+
     agent = Agent.create(
         agent='tensorforce',
         environment=environment,
