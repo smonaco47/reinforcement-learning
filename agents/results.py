@@ -2,10 +2,15 @@ from datetime import datetime
 
 
 class Results:
-    results = []
+    def __init__(self):
+        self.results = []
+        self.hit_goal=0
 
-    def add_result(self, result):
+    def add_result(self, result, hit_goal=False):
         self.results.append(result)
+
+        if hit_goal:
+            self.hit_goal+=1
 
     def print_summary(self):
         len_results = len(self.results)
@@ -16,11 +21,14 @@ class Results:
     @classmethod
     def csv_header(cls, iterations) -> str:
         step_size = iterations // 25
-        indices = [str(i) for i in range(step_size, iterations + 1, step_size)]
-        return ",".join(indices)
+        headers = ["max", "hit_goal"]
+        headers.extend(str(i) for i in range(step_size, iterations + 1, step_size))
+        return ",".join(headers)
 
     def csv_result(self):
         len_results = len(self.results)
         step_size = len_results // 25
-        indices = [str( sum(self.results[i:i+step_size]) / step_size) for i in range(0, len_results, step_size)]
-        return ",".join(indices)
+        values = [max(self.results), self.hit_goal]
+        values.extend(sum(self.results[i:i+step_size]) / step_size for i in range(0, len_results, step_size))
+        str_values = [str(value) for value in values]
+        return ",".join(str_values)
