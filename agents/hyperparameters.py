@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 
 
 class Hyperparameters:
@@ -16,14 +17,15 @@ class Hyperparameters:
 
     batch_size = 64
     memory = 10000
-    horizon = 100
+    horizon = 200
 
     def randomize(self):
-        lr_range = self.random_range(1e-6, 1e-2)
+        random.seed(datetime.now())
+        lr_range = self.random_range_exponential(-6, -2)
         self.lr_initial = lr_range[1]
         self.lr_final = lr_range[0]
         self.lr_decay = random.uniform(0.99, 0.99999)
-        self.lr_steps = random.randrange(2500)
+        self.lr_steps = random.randrange(5000)
         self.lr_type = random.choice(['linear', 'exponential'])
 
         explore_range = self.random_range(0, 0.9)
@@ -36,6 +38,15 @@ class Hyperparameters:
     @classmethod
     def random_range(cls, lower, upper):
         values = (random.uniform(lower, upper), random.uniform(lower, upper))
+        return sorted(values)
+
+    @classmethod
+    def random_range_exponential(cls, lower, upper):
+        exponent_1 = random.uniform(lower, upper)
+        exponent_2 = random.uniform(lower, upper)
+        base_1 = random.uniform(1, 9)
+        base_2 = random.uniform(1, 9)
+        values = (base_1 * (10 ** exponent_1), base_2 * (10 ** exponent_2))
         return sorted(values)
 
     @classmethod
