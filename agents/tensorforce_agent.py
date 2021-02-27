@@ -102,10 +102,8 @@ if __name__ == "__main__":
     )
 
     params = Hyperparameters()
-    params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,0.3,0,0.99,2500,exponential,16,1.0") # Landed pretty ok! Hovered a lot in the right spot after 5000 iterations
+    # params = Hyperparameters.from_csv("0.00010895333588082155,4.0102600954974266e-07,0.998792570730397,4639,exponential,0.07806314924326674,0.007102957506168539,0.9972166634078218,860,exponential,95,0.0134")
 
-    # params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,0.1,0,0.99,2413,exponential,16,1.0") # Landed pretty ok! Hovered a lot in the right spot after 5000 iterations
-    # params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,1e-05,0,0.999999,2413,exponential,16")
-    train_model(lander_env, params, verbose=True, max_iterations=10000, seed=RANDOM_SEED)
+    train_model(lander_env, params, verbose=True, max_iterations=2205, seed=RANDOM_SEED)
 
     lander_env.close()
