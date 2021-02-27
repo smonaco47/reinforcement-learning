@@ -26,3 +26,13 @@ def test_exponent_range():
     assert range[1] >= range[0]
     assert 1e-6 < range[0]
     assert range[1] < 9e-3
+
+def test_decay():
+    decay = Hyperparameters.random_decay()
+
+    assert 0.8 < decay
+    assert decay < 1
+
+def test_decay_calc():
+    decay = Hyperparameters.calc_decay(1, (1/16), 4)
+    assert decay == 0.5

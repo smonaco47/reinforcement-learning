@@ -21,14 +21,15 @@ class Results:
     @classmethod
     def csv_header(cls, iterations) -> str:
         step_size = iterations // 25
-        headers = ["max", "hit_goal"]
+        headers = ["max", "max_group", "hit_goal"]
         headers.extend(str(i) for i in range(step_size, iterations + 1, step_size))
         return ",".join(headers)
 
     def csv_result(self):
         len_results = len(self.results)
         step_size = len_results // 25
-        values = [max(self.results), self.hit_goal]
-        values.extend(sum(self.results[i:i+step_size]) / step_size for i in range(0, len_results, step_size))
+        buckets = [sum(self.results[i:i+step_size]) / step_size for i in range(0, len_results, step_size)]
+        values = [max(self.results), max(buckets), self.hit_goal ]
+        values.extend(buckets)
         str_values = [str(value) for value in values]
         return ",".join(str_values)

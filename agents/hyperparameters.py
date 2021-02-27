@@ -18,22 +18,31 @@ class Hyperparameters:
     batch_size = 64
     memory = 10000
     horizon = 200
+    discount=1.0
 
-    def randomize(self):
+    def randomize(self, steps=1000):
         random.seed(datetime.now())
-        lr_range = self.random_range_exponential(-6, -2)
+        lr_range = self.random_range_exponential(-7, -4)
         self.lr_initial = lr_range[1]
         self.lr_final = lr_range[0]
-        self.lr_decay = random.uniform(0.99, 0.99999)
-        self.lr_steps = random.randrange(5000)
+        self.lr_steps = random.randrange(steps)
+        self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
         self.lr_type = random.choice(['linear', 'exponential'])
 
-        explore_range = self.random_range(0, 0.9)
+        explore_range = self.random_range(0, 1)
         self.explore_initial = explore_range[1]
-        self.explore_final = explore_range[0]
-        self.explore_decay = random.uniform(0.99, 0.99999)
-        self.explore_steps = random.randrange(2500)
-        self.explore_type = random.choice(['linear', 'exponential'])
+        self.explore_final = explore_range[0] / 10
+        self.explore_steps = random.randrange(steps)
+        self.explore_decay = self.calc_decay(self.explore_initial, self.explore_final, self.explore_steps)
+        self.explore_type = random.choice(['exponential'])
+
+        self.horizon = random.randrange(200)
+        self.discount = random.choice([x/10 for x in range(1, 11)])
+
+    @classmethod
+    def calc_decay(cls, initial, final, steps):
+        return (final / initial) ** (1/steps)
+
 
     @classmethod
     def random_range(cls, lower, upper):
@@ -42,8 +51,8 @@ class Hyperparameters:
 
     @classmethod
     def random_range_exponential(cls, lower, upper):
-        exponent_1 = random.uniform(lower, upper)
-        exponent_2 = random.uniform(lower, upper)
+        exponent_1 = random.choice(range(lower,upper+1))
+        exponent_2 = random.choice(range(lower,upper+1))
         base_1 = random.uniform(1, 9)
         base_2 = random.uniform(1, 9)
         values = (base_1 * (10 ** exponent_1), base_2 * (10 ** exponent_2))
@@ -51,10 +60,10 @@ class Hyperparameters:
 
     @classmethod
     def csv_header(cls) -> str:
-        return "lr_initial,lr_final,lr_decay,lr_steps,lr_type,explore_initial,explore_final,explore_decay,explore_steps,explore_type"
+        return "lr_initial,lr_final,lr_decay,lr_steps,lr_type,explore_initial,explore_final,explore_decay,explore_steps,explore_type,horizon,discount"
 
     def csv_params(self) -> str:
-        return f"{self.lr_initial},{self.lr_final},{self.lr_decay},{self.lr_steps},{self.lr_type},{self.explore_initial},{self.explore_final},{self.explore_decay},{self.explore_steps},{self.explore_type}"
+        return f"{self.lr_initial},{self.lr_final},{self.lr_decay},{self.lr_steps},{self.lr_type},{self.explore_initial},{self.explore_final},{self.explore_decay},{self.explore_steps},{self.explore_type},{self.horizon},{self.discount}"
 
     @classmethod
     def from_csv(cls, val: str):
@@ -70,4 +79,11 @@ class Hyperparameters:
         params.explore_decay = float(val[7])
         params.explore_steps = int(val[8])
         params.explore_type = val[9]
+        params.horizon = int(val[10])
+        params.discount = float(val[11])
         return params
+
+    @classmethod
+    def random_decay(cls):
+        num = f"0.{random.randrange(8, 10)}{random.randrange(10)}{random.randrange(10)}{random.randrange(10)}"
+        return float(num)

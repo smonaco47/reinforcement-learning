@@ -27,7 +27,7 @@ def run_episode(agent, environment, render=False):
     return sum_rewards
 
 
-def train_model(environment, params: Hyperparameters, max_iterations=10000, goal_reward=200, show_final=False, seed=0):
+def train_model(environment, params: Hyperparameters, max_iterations=10000, goal_reward=200, verbose=False, seed=0):
     environment.environment.seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -38,8 +38,8 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
 
     for i in range(max_iterations):
 
-        # if (i % 50) == 0 and i > 1:
-        #     result.print_summary()
+        if verbose and (i % 200) == 0 and i > 1:
+            result.print_summary()
 
         episode_reward = run_episode(agent, environment)
 
@@ -49,7 +49,7 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
         if hit_goal:
             print(f"Hit goal in {i} iterations with a reward of {episode_reward}!")
 
-    if show_final:
+    if verbose:
         input("Finished training, press here to continue...")
         for _ in range(5):
             episode_reward = run_episode(agent, environment, render=True)
@@ -88,7 +88,7 @@ def create_agent(environment, params, seed):
         exploration=explore_dict,
         policy=dict(network='auto'),
         objective='policy_gradient',
-        reward_estimation=dict(horizon=params.horizon),
+        reward_estimation=dict(horizon=params.horizon, discount=params.discount),
         config={'seed': seed}
     )
     return agent
@@ -98,10 +98,14 @@ if __name__ == "__main__":
     RANDOM_SEED = 0
 
     lander_env = Environment.create(
-        environment='gym', level='LunarLander-v2', max_episode_timesteps=500
+        environment='gym', level='LunarLander-v2', max_episode_timesteps=750
     )
 
     params = Hyperparameters()
-    train_model(lander_env, params, show_final=True, max_iterations=250, seed=RANDOM_SEED)
+    params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,0.3,0,0.99,2500,exponential,16,1.0") # Landed pretty ok! Hovered a lot in the right spot after 5000 iterations
+
+    # params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,0.1,0,0.99,2413,exponential,16,1.0") # Landed pretty ok! Hovered a lot in the right spot after 5000 iterations
+    # params = Hyperparameters.from_csv("9.646949104371577e-05,2.971761831837809e-05,0.9152,600,exponential,1e-05,0,0.999999,2413,exponential,16")
+    train_model(lander_env, params, verbose=True, max_iterations=10000, seed=RANDOM_SEED)
 
     lander_env.close()

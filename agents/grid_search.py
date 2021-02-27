@@ -11,7 +11,7 @@ params = Hyperparameters()
 iterations = 5000
 RANDOM_SEED = 0
 
-with open(f"output-{datetime.now().strftime('%H-%M-%S')}.csv", 'w') as out_file:
+with open(f"output/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", 'w') as out_file:
     out_file.write(f"{Hyperparameters.csv_header()},{Results.csv_header(iterations)}\n")
     out_file.flush()
 
@@ -26,8 +26,8 @@ with open(f"output-{datetime.now().strftime('%H-%M-%S')}.csv", 'w') as out_file:
 
             print(f"{datetime.now().strftime('%H:%M:%S')}\t{i}")
 
-            params.randomize()
-            result = train_model(lander_env, params, max_iterations=iterations, show_final=False, seed=RANDOM_SEED)
+            params.randomize(iterations)
+            result = train_model(lander_env, params, max_iterations=iterations, verbose=False, seed=RANDOM_SEED)
             out_file.write(f"{params.csv_params()},{result.csv_result()}\n")
             out_file.flush()
 
