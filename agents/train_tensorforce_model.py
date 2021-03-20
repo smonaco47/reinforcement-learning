@@ -1,8 +1,9 @@
 import random
 
 import numpy as np
-from tensorforce import Agent, Environment
+from tensorforce import Environment
 
+from agents.agent import AgentFactory
 from agents.hyperparameters import Hyperparameters
 from agents.results import Results
 
@@ -34,7 +35,7 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
 
     result = Results()
 
-    agent = create_agent(environment, params, seed)
+    agent = AgentFactory.create_tensorforce_agent(environment, params, seed)
 
     for i in range(max_iterations):
 
@@ -60,40 +61,6 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
     return result
 
 
-def create_agent(environment, params, seed):
-    lr_dict = dict(
-        type=params.lr_type, unit='episodes', num_steps=params.lr_steps,
-        initial_value=params.lr_initial
-    )
-    if params.lr_type == 'linear':
-        lr_dict["final_value"] = params.lr_final
-    else:
-        lr_dict["decay_rate"] = params.lr_decay
-
-    explore_dict = dict(
-        type=params.explore_type, unit='episodes', num_steps=params.explore_steps,
-        initial_value=params.explore_initial, final_value=params.explore_final
-    )
-    if params.explore_type == 'linear':
-        explore_dict["final_value"] = params.explore_final
-    else:
-        explore_dict["decay_rate"] = params.explore_decay
-
-    agent = Agent.create(
-        agent='tensorforce',
-        environment=environment,
-        memory=params.memory,
-        update=dict(unit='timesteps', batch_size=params.batch_size),
-        optimizer=dict(type='adam', learning_rate=lr_dict),
-        exploration=explore_dict,
-        policy=dict(network='auto'),
-        objective='policy_gradient',
-        reward_estimation=dict(horizon=params.horizon, discount=params.discount),
-        config={'seed': seed}
-    )
-    return agent
-
-
 if __name__ == "__main__":
     RANDOM_SEED = 0
 
@@ -104,6 +71,6 @@ if __name__ == "__main__":
     params = Hyperparameters()
     # params = Hyperparameters.from_csv("0.00010895333588082155,4.0102600954974266e-07,0.998792570730397,4639,exponential,0.07806314924326674,0.007102957506168539,0.9972166634078218,860,exponential,95,0.0134")
 
-    train_model(lander_env, params, verbose=True, max_iterations=2205, seed=RANDOM_SEED)
+    train_model(lander_env, params, verbose=True, max_iterations=5, seed=RANDOM_SEED)
 
     lander_env.close()
