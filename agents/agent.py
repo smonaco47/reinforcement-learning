@@ -1,4 +1,4 @@
-from tensorforce import Agent
+from tensorforce.agents import DoubleDQN, TensorforceAgent
 
 
 class AgentFactory(object):
@@ -7,13 +7,12 @@ class AgentFactory(object):
         '''
         https://tensorforce.readthedocs.io/en/latest/agents/tensorforce.html
         '''
-        agent = Agent.create(
-            agent='tensorforce',
+        agent = TensorforceAgent.create(
             environment=environment,
             memory=params.memory,
             update=dict(unit='timesteps', batch_size=params.batch_size),
-            optimizer=dict(type='adam', learning_rate=cls.build_learning_rate_dict(params)),
-            exploration=cls.build_explore_dict(params),
+            optimizer=dict(type='adam', learning_rate=cls._build_learning_rate_dict(params)),
+            exploration=cls._build_explore_dict(params),
             policy=dict(network='auto'),
             objective='policy_gradient',
             reward_estimation=dict(horizon=params.horizon, discount=params.discount),
@@ -22,7 +21,29 @@ class AgentFactory(object):
         return agent
 
     @classmethod
-    def build_explore_dict(cls, params):
+    def create_ddqn_agent(cls, environment, params, seed=0):
+        '''
+        https://tensorforce.readthedocs.io/en/latest/agents/double_dqn.html
+        '''
+        agent = DoubleDQN(
+            states=environment.states(),
+            actions=environment.actions(),
+            memory=params.memory,
+            batch_size=params.batch_size,  # Timesteps per update batch
+            update_frequency=params.batch_size,
+            start_updating=params.batch_size,  # number of steps prior to first update
+            network='auto',
+            learning_rate=cls._build_learning_rate_dict(params),
+            horizon=params.horizon,
+            discount=params.discount,  # Default 0.99
+            exploration=cls._build_explore_dict(params),
+            config={'seed': seed}
+        )
+        agent.initialize()
+        return agent
+
+    @classmethod
+    def _build_explore_dict(cls, params):
         explore_dict = dict(
             type=params.explore_type, unit='episodes', num_steps=params.explore_steps,
             initial_value=params.explore_initial, final_value=params.explore_final
@@ -34,7 +55,7 @@ class AgentFactory(object):
         return explore_dict
 
     @classmethod
-    def build_learning_rate_dict(cls, params):
+    def _build_learning_rate_dict(cls, params):
         lr_dict = dict(
             type=params.lr_type, unit='episodes', num_steps=params.lr_steps,
             initial_value=params.lr_initial

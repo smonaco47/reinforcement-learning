@@ -35,7 +35,7 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
 
     result = Results()
 
-    agent = AgentFactory.create_tensorforce_agent(environment, params, seed)
+    agent = AgentFactory.create_ddqn_agent(environment, params, seed)
 
     for i in range(max_iterations):
 
