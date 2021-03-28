@@ -9,7 +9,7 @@ from agents.results import Results
 
 params = Hyperparameters()
 
-iterations = 2000
+iterations = 1500
 RANDOM_SEED = 0
 
 with open(f"output/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", 'w') as out_file:

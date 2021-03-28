@@ -22,13 +22,13 @@ class Hyperparameters:
 
     def randomize(self, steps=1000):
         random.seed(datetime.now())
-        lr_range = self.random_range_exponential(-6, -4)
+        lr_range = self.random_range_exponential(-6, -3)
         self.lr_initial = lr_range[1]
         self.lr_final = lr_range[0]
         self.lr_steps = random.randrange(steps)
         self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
 
-        explore_range = self.random_range(0, 0.231)
+        explore_range = self.random_range(0, 0.3)
         self.explore_initial = explore_range[1]
         self.explore_final = explore_range[0] / 10
         self.explore_steps = random.randrange(steps)
@@ -37,7 +37,8 @@ class Hyperparameters:
         self.horizon = random.randrange(200)
         self.discount = random.choice([x / 100 for x in range(50, 101)])
 
-        self.batch_size = 2 ** random.randint(5, 12)
+        self.batch_size = 2 ** random.randint(4, 8)
+        self.memory = random.choice([1000, 10000, 100000])
 
     @classmethod
     def calc_decay(cls, initial, final, steps):
@@ -59,10 +60,10 @@ class Hyperparameters:
 
     @classmethod
     def csv_header(cls) -> str:
-        return "lr_initial,lr_final,lr_decay,lr_steps,lr_type,explore_initial,explore_final,explore_decay,explore_steps,explore_type,horizon,discount,batch_size"
+        return "lr_initial,lr_final,lr_decay,lr_steps,lr_type,explore_initial,explore_final,explore_decay,explore_steps,explore_type,horizon,discount,batch_size,memory"
 
     def csv_params(self) -> str:
-        return f"{self.lr_initial},{self.lr_final},{self.lr_decay},{self.lr_steps},{self.lr_type},{self.explore_initial},{self.explore_final},{self.explore_decay},{self.explore_steps},{self.explore_type},{self.horizon},{self.discount},{self.batch_size}"
+        return f"{self.lr_initial},{self.lr_final},{self.lr_decay},{self.lr_steps},{self.lr_type},{self.explore_initial},{self.explore_final},{self.explore_decay},{self.explore_steps},{self.explore_type},{self.horizon},{self.discount},{self.batch_size},{self.memory}"
 
     @classmethod
     def from_csv(cls, val: str):
@@ -81,6 +82,7 @@ class Hyperparameters:
         params.horizon = int(val[10])
         params.discount = float(val[11])
         params.batch_size = int(val[12])
+        params.memory = int(val[12])
         return params
 
     @classmethod

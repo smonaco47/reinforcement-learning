@@ -3,7 +3,7 @@ import csv
 
 import numpy as np
 
-EXPECTED_LEN = 41
+EXPECTED_LEN = 42
 
 
 def process_file(filename, results_object):
