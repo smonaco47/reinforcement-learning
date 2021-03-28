@@ -4,7 +4,7 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
-EXPECTED_LEN = 40
+EXPECTED_LEN = 41
 
 
 def process_file(filename, results_object):

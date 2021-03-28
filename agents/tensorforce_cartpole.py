@@ -18,7 +18,7 @@ agent = Agent.create(
 )
 
 rewards = []
-num_iterations = 3000
+num_iterations = 500
 for i in range(num_iterations):
     states = environment.reset()
     terminal = False
@@ -32,7 +32,7 @@ for i in range(num_iterations):
 
     rewards.append(sum_rewards)
 
-    if (i % 200) == 0 and i > 1:
+    if (i % 100) == 0 and i > 1:
         print(f"{i}\t{sum(rewards[-11:-1])/10}")
 
     if sum_rewards == 400:

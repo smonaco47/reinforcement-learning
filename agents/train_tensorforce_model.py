@@ -28,16 +28,14 @@ def run_episode(agent, environment, render=False):
     return sum_rewards
 
 
-def train_model(environment, params: Hyperparameters, max_iterations=10000, goal_reward=200, verbose=False, seed=0):
+def train_model(environment, agent, iterations=10000, goal_reward=200, verbose=False, seed=0):
     environment.environment.seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
     result = Results()
 
-    agent = AgentFactory.create_ddqn_agent(environment, params, seed)
-
-    for i in range(max_iterations):
+    for i in range(iterations):
 
         if verbose and (i % 200) == 0 and i > 1:
             result.print_summary()
@@ -64,13 +62,18 @@ def train_model(environment, params: Hyperparameters, max_iterations=10000, goal
 if __name__ == "__main__":
     RANDOM_SEED = 0
 
-    lander_env = Environment.create(
-        environment='gym', level='LunarLander-v2', max_episode_timesteps=750
+    # environment = Environment.create(
+    #     environment='gym', level='LunarLander-v2', max_episode_timesteps=750
+    # )
+    environment = Environment.create(
+        environment='gym', level='CartPole', max_episode_timesteps=400
     )
 
     params = Hyperparameters()
-    # params = Hyperparameters.from_csv("0.00010895333588082155,4.0102600954974266e-07,0.998792570730397,4639,exponential,0.07806314924326674,0.007102957506168539,0.9972166634078218,860,exponential,95,0.0134")
+    params.randomize()
 
-    train_model(lander_env, params, verbose=True, max_iterations=5, seed=RANDOM_SEED)
+    agent = AgentFactory.create_tensorforce_agent(environment, params, RANDOM_SEED)
 
-    lander_env.close()
+    train_model(environment, agent, verbose=True, iterations=500, seed=RANDOM_SEED, goal_reward=400)
+
+    environment.close()
