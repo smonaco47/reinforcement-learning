@@ -4,13 +4,13 @@ from datetime import datetime
 class Results:
     def __init__(self):
         self.results = []
-        self.hit_goal=0
+        self.hit_goal = 0
 
     def add_result(self, result, hit_goal=False):
         self.results.append(result)
 
         if hit_goal:
-            self.hit_goal+=1
+            self.hit_goal += 1
 
     def print_summary(self):
         len_results = len(self.results)
@@ -28,8 +28,8 @@ class Results:
     def csv_result(self):
         len_results = len(self.results)
         step_size = len_results // 25
-        buckets = [sum(self.results[i:i+step_size]) / step_size for i in range(0, len_results, step_size)]
-        values = [max(self.results), max(buckets), self.hit_goal ]
+        buckets = [sum(self.results[i:i + step_size]) / step_size for i in range(0, len_results, step_size)]
+        values = [max(self.results), max(buckets), self.hit_goal]
         values.extend(buckets)
         str_values = [str(value) for value in values]
         return ",".join(str_values)

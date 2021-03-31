@@ -38,7 +38,7 @@ class Hyperparameters:
         self.discount = random.choice([x / 100 for x in range(50, 101)])
 
         self.batch_size = 2 ** random.randint(4, 8)
-        self.memory = random.choice([1000, 10000, 100000])
+        self.memory = random.choice([10000, 50000, 100000])
 
     @classmethod
     def calc_decay(cls, initial, final, steps):
@@ -82,7 +82,7 @@ class Hyperparameters:
         params.horizon = int(val[10])
         params.discount = float(val[11])
         params.batch_size = int(val[12])
-        params.memory = int(val[12])
+        params.memory = int(val[13])
         return params
 
     @classmethod
