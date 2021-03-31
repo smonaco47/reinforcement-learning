@@ -4,7 +4,7 @@ import csv
 import numpy as np
 
 EXPECTED_LEN = 42
-root_dir = "agents/output/"
+root_dir = "output/"
 
 
 def process_file(filename, results_object):

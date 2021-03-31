@@ -2,10 +2,10 @@ from datetime import datetime
 
 from tensorforce import Environment
 
-from agents.agent import AgentFactory
-from agents.hyperparameters import Hyperparameters
-from agents.train_tensorforce_model import train_model
-from agents.results import Results
+from src.agent import AgentFactory
+from src.hyperparameters import Hyperparameters
+from src.train_tensorforce_model import train_model
+from src.results import Results
 
 params = Hyperparameters()
 

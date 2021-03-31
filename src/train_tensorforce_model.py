@@ -3,9 +3,9 @@ import random
 import numpy as np
 from tensorforce import Environment
 
-from agents.agent import AgentFactory
-from agents.hyperparameters import Hyperparameters
-from agents.results import Results
+from src.agent import AgentFactory
+from src.hyperparameters import Hyperparameters
+from src.results import Results
 
 
 def run_episode(agent, environment, render=False):

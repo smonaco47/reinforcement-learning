@@ -1,4 +1,4 @@
-from agents.hyperparameters import Hyperparameters
+from src.hyperparameters import Hyperparameters
 
 
 def test_randomization():
@@ -18,7 +18,7 @@ def test_randomization_loop():
         hp.randomize()
         print(hp.lr_initial, hp.lr_final, hp.lr_type, hp.lr_steps, hp.explore_initial, hp.explore_final,
               hp.explore_type, hp.explore_steps)
-    assert False
+    # assert False
 
 def test_exponent_range():
     range = Hyperparameters.random_range_exponential(-6, -3)
