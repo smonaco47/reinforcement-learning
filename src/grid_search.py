@@ -11,8 +11,9 @@ params = Hyperparameters()
 
 iterations = 1500
 RANDOM_SEED = 0
+OUTPUT_FOLDER = "output"
 
-with open(f"output/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", 'w') as out_file:
+with open(f"{OUTPUT_FOLDER}/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", 'w') as out_file:
     out_file.write(f"{Hyperparameters.csv_header()},{Results.csv_header(iterations)}\n")
     out_file.flush()
 

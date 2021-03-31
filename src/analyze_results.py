@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 EXPECTED_LEN = 42
-
+OUTPUT_FOLDER = 'output'
 
 def process_file(filename, results_object):
     with open(filename, 'r') as csvfile:
@@ -22,7 +22,7 @@ def process_file(filename, results_object):
 
 
 results = []
-for entry in os.scandir('output'):
+for entry in os.scandir(OUTPUT_FOLDER):
     path = entry.path
     if path[-4:] != '.csv':
         continue

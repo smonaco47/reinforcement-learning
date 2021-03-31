@@ -8,7 +8,9 @@ from src.train_tensorforce_model import train_model
 
 RANDOM_SEED = 0
 i = 0
-for line in open("output/best_simplified.csv",'r'):
+OUTPUT_FOLDER = "output"
+
+for line in open(f"{OUTPUT_FOLDER}/best_simplified.csv",'r'):
     params, iterations = line.split('!')
     iterations = int(iterations)
     print(params, iterations)

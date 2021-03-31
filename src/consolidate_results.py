@@ -4,7 +4,7 @@ import csv
 import numpy as np
 
 EXPECTED_LEN = 42
-root_dir = "output/"
+OUTPUT_FOLDER = "output/"
 
 
 def process_file(filename, results_object):
@@ -27,7 +27,7 @@ def index_of_header(header_value):
 
 results = []
 headers = []
-for entry in os.scandir(root_dir):
+for entry in os.scandir(OUTPUT_FOLDER):
     path = entry.path
     if path[-4:] != '.csv':
         continue
@@ -37,7 +37,7 @@ results = np.array(results)
 header = np.array(headers)
 results_with_header = np.vstack([header, results])
 
-np.savetxt(f"{root_dir}consolidated_output.csv", results_with_header, '%s', delimiter=",")
+np.savetxt(f"{OUTPUT_FOLDER}consolidated_output.csv", results_with_header, '%s', delimiter=",")
 
 # Remove colunns that don't really change or are dependent on other columns
 cleaned_results = np.copy(results_with_header)
@@ -48,4 +48,4 @@ idx_to_remove = [index_of_header(val) for val in
                  ["lr_decay", "lr_type", "explore_decay", "explore_type", "max", "max_group"]]
 cleaned_results = np.delete(cleaned_results, idx_to_remove, axis=1)
 
-np.savetxt(f"{root_dir}output_for_dt.csv", cleaned_results, '%s', delimiter=",")
+np.savetxt(f"{OUTPUT_FOLDER}output_for_dt.csv", cleaned_results, '%s', delimiter=",")
