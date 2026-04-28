@@ -1,5 +1,10 @@
+import math
 import random
-from datetime import datetime
+
+
+def log_uniform(low, high):
+    """Sample uniformly in log space — gives equal probability to each order of magnitude."""
+    return math.exp(random.uniform(math.log(low), math.log(high)))
 
 
 class Hyperparameters:
@@ -21,24 +26,68 @@ class Hyperparameters:
     discount = 1.0
 
     def randomize(self, steps=1000):
-        random.seed(datetime.now())
         lr_range = self.random_range_exponential(-6, -3)
         self.lr_initial = lr_range[1]
         self.lr_final = lr_range[0]
-        self.lr_steps = random.randrange(steps)
+        self.lr_steps = random.randrange(max(1, steps))
         self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
 
-        explore_range = self.random_range(0, 0.3)
+        explore_range = self.random_range(0.01, 0.3)
         self.explore_initial = explore_range[1]
         self.explore_final = explore_range[0] / 10
-        self.explore_steps = random.randrange(steps)
+        self.explore_steps = random.randrange(max(1, steps))
         self.explore_decay = self.calc_decay(self.explore_initial, self.explore_final, self.explore_steps)
 
-        self.horizon = random.randrange(200)
+        self.horizon = random.randrange(1, 200)
         self.discount = random.choice([x / 100 for x in range(50, 101)])
 
         self.batch_size = 2 ** random.randint(4, 8)
         self.memory = random.choice([10000, 50000, 100000])
+
+    def randomize_narrow(self, steps=1000,
+                         lr_initial_range=(1e-5, 1e-3),
+                         lr_final_range=(1e-6, 1e-4),
+                         explore_initial_range=(0.05, 0.3),
+                         explore_final_range=(0.001, 0.05),
+                         horizon_range=(50, 200),
+                         discount_range=(0.90, 1.0),
+                         batch_sizes=(32, 64, 128),
+                         memories=(10000, 50000, 100000)):
+        """
+        Second-stage randomization with narrowed bounds based on what worked well
+        in the first-stage grid search. After analyzing results, pass in the ranges
+        that correlated with high eval_mean.
+
+        Example usage after analyzing results:
+            params.randomize_narrow(
+                steps=1500,
+                lr_initial_range=(1e-4, 1e-3),
+                discount_range=(0.95, 1.0),
+                batch_sizes=(64, 128),
+            )
+        """
+        self.lr_initial = log_uniform(*lr_initial_range)
+        self.lr_final = log_uniform(*lr_final_range)
+        # Ensure lr_final < lr_initial
+        if self.lr_final >= self.lr_initial:
+            self.lr_final = self.lr_initial / 10
+
+        self.lr_steps = random.randrange(max(1, steps))
+        self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
+
+        self.explore_initial = log_uniform(*explore_initial_range)
+        self.explore_final = log_uniform(*explore_final_range)
+        if self.explore_final >= self.explore_initial:
+            self.explore_final = self.explore_initial / 10
+
+        self.explore_steps = random.randrange(max(1, steps))
+        self.explore_decay = self.calc_decay(self.explore_initial, self.explore_final, self.explore_steps)
+
+        self.horizon = random.randint(*horizon_range)
+        self.discount = random.uniform(*discount_range)
+
+        self.batch_size = random.choice(batch_sizes)
+        self.memory = random.choice(memories)
 
     @classmethod
     def calc_decay(cls, initial, final, steps):
@@ -51,11 +100,9 @@ class Hyperparameters:
 
     @classmethod
     def random_range_exponential(cls, lower, upper):
-        exponent_1 = random.choice(range(lower, upper + 1))
-        exponent_2 = random.choice(range(lower, upper + 1))
-        base_1 = random.uniform(1, 9)
-        base_2 = random.uniform(1, 9)
-        values = (base_1 * (10 ** exponent_1), base_2 * (10 ** exponent_2))
+        low = 10 ** lower
+        high = 10 ** upper
+        values = (log_uniform(low, high), log_uniform(low, high))
         return sorted(values)
 
     @classmethod

@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "rl-gym"
+version = "0.1.0"
+description = "RL experiments with Stable Baselines3 and Gymnasium"
+authors = []
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "3.13.*"
+stable-baselines3 = {version = ">=2.3.0", extras = ["extra"]}  # includes tqdm, rich for progress bar
+numpy = ">=1.26.0,<3.0"
+torch = ">=2.3.0"
+gymnasium = {extras = ["box2d"], version = "^1.3.0"}
+swig = "^4.4.1"
+click = "^8.3.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
