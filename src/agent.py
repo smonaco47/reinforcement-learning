@@ -20,9 +20,6 @@ class HitGoalCallback(BaseCallback):
         if done:
             hit_goal = self._episode_reward >= self.goal_reward
             self.results.add_result(self._episode_reward, hit_goal)
-            if hit_goal:
-                print(f"Hit goal in episode {len(self.results.results)} "
-                      f"with a reward of {self._episode_reward}!")
             self._episode_reward = 0.0
 
         return True
