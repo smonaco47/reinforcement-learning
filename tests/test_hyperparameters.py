@@ -6,19 +6,28 @@ def test_randomization():
     hyperparameters.randomize()
 
     assert hyperparameters.lr_initial >= hyperparameters.lr_final
-    assert hyperparameters.lr_type in ['linear', 'exponential']
+    assert hyperparameters.lr_type in ["linear", "exponential"]
 
     assert hyperparameters.explore_initial >= hyperparameters.explore_final
-    assert hyperparameters.explore_type in ['linear', 'exponential']
+    assert hyperparameters.explore_type in ["linear", "exponential"]
 
 
 def test_randomization_loop():
     hp = Hyperparameters()
     for i in range(10):
         hp.randomize()
-        print(hp.lr_initial, hp.lr_final, hp.lr_type, hp.lr_steps, hp.explore_initial, hp.explore_final,
-              hp.explore_type, hp.explore_steps)
+        print(
+            hp.lr_initial,
+            hp.lr_final,
+            hp.lr_type,
+            hp.lr_steps,
+            hp.explore_initial,
+            hp.explore_final,
+            hp.explore_type,
+            hp.explore_steps,
+        )
     # assert False
+
 
 def test_exponent_range():
     range = Hyperparameters.random_range_exponential(-6, -3)
@@ -27,12 +36,14 @@ def test_exponent_range():
     assert 1e-6 < range[0]
     assert range[1] < 9e-3
 
+
 def test_decay():
     decay = Hyperparameters.random_decay()
 
     assert 0.8 < decay
     assert decay < 1
 
+
 def test_decay_calc():
-    decay = Hyperparameters.calc_decay(1, (1/16), 4)
+    decay = Hyperparameters.calc_decay(1, (1 / 16), 4)
     assert decay == 0.5

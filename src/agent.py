@@ -44,7 +44,9 @@ class AgentFactory:
             gamma=params.discount,
             train_freq=params.batch_size,
             learning_starts=params.batch_size,
-            exploration_fraction=params.explore_steps / 1500,  # fraction of training for exploration decay
+            exploration_fraction=(
+                params.explore_steps / 1500
+            ),  # fraction of training for exploration decay
             exploration_initial_eps=params.explore_initial,
             exploration_final_eps=params.explore_final,
             seed=seed,
@@ -59,13 +61,17 @@ class AgentFactory:
         Returns a schedule function for the learning rate.
         SB3 schedules receive `progress_remaining` (1.0 -> 0.0 over training).
         """
-        if params.lr_type == 'linear':
+        if params.lr_type == "linear":
+
             def lr_schedule(progress_remaining):
                 # progress_remaining goes 1.0 -> 0.0
-                return params.lr_final + (params.lr_initial - params.lr_final) * progress_remaining
+                return (
+                    params.lr_final
+                    + (params.lr_initial - params.lr_final) * progress_remaining
+                )
         else:
             # exponential: use decay rate per episode approximated over progress
             def lr_schedule(progress_remaining):
-                return max(params.lr_final, params.lr_initial * (progress_remaining ** 2))
+                return max(params.lr_final, params.lr_initial * (progress_remaining**2))
 
         return lr_schedule

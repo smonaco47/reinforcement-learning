@@ -12,13 +12,13 @@ class Hyperparameters:
     lr_final = 1e-4
     lr_steps = 1000
     lr_decay = 0.99
-    lr_type = 'linear'
+    lr_type = "linear"
 
     explore_initial = 0.1
     explore_final = 0.0001
     explore_steps = 1000
     explore_decay = 0.99
-    explore_type = 'exponential'
+    explore_type = "exponential"
 
     batch_size = 64
     memory = 10000
@@ -36,7 +36,9 @@ class Hyperparameters:
         self.explore_initial = explore_range[1]
         self.explore_final = explore_range[0] / 10
         self.explore_steps = random.randrange(max(1, steps))
-        self.explore_decay = self.calc_decay(self.explore_initial, self.explore_final, self.explore_steps)
+        self.explore_decay = self.calc_decay(
+            self.explore_initial, self.explore_final, self.explore_steps
+        )
 
         self.horizon = random.randrange(1, 200)
         self.discount = random.choice([x / 100 for x in range(50, 101)])
@@ -44,15 +46,18 @@ class Hyperparameters:
         self.batch_size = 2 ** random.randint(4, 8)
         self.memory = random.choice([10000, 50000, 100000])
 
-    def randomize_narrow(self, steps=1000,
-                         lr_initial_range=(1e-5, 1e-3),
-                         lr_final_range=(1e-6, 1e-4),
-                         explore_initial_range=(0.05, 0.3),
-                         explore_final_range=(0.001, 0.05),
-                         horizon_range=(50, 200),
-                         discount_range=(0.90, 1.0),
-                         batch_sizes=(32, 64, 128),
-                         memories=(10000, 50000, 100000)):
+    def randomize_narrow(
+        self,
+        steps=1000,
+        lr_initial_range=(1e-5, 1e-3),
+        lr_final_range=(1e-6, 1e-4),
+        explore_initial_range=(0.05, 0.3),
+        explore_final_range=(0.001, 0.05),
+        horizon_range=(50, 200),
+        discount_range=(0.90, 1.0),
+        batch_sizes=(32, 64, 128),
+        memories=(10000, 50000, 100000),
+    ):
         """
         Second-stage randomization with narrowed bounds based on what worked well
         in the first-stage grid search. After analyzing results, pass in the ranges
@@ -81,7 +86,9 @@ class Hyperparameters:
             self.explore_final = self.explore_initial / 10
 
         self.explore_steps = random.randrange(max(1, steps))
-        self.explore_decay = self.calc_decay(self.explore_initial, self.explore_final, self.explore_steps)
+        self.explore_decay = self.calc_decay(
+            self.explore_initial, self.explore_final, self.explore_steps
+        )
 
         self.horizon = random.randint(*horizon_range)
         self.discount = random.uniform(*discount_range)
@@ -100,8 +107,8 @@ class Hyperparameters:
 
     @classmethod
     def random_range_exponential(cls, lower, upper):
-        low = 10 ** lower
-        high = 10 ** upper
+        low = 10**lower
+        high = 10**upper
         values = (log_uniform(low, high), log_uniform(low, high))
         return sorted(values)
 
@@ -113,8 +120,8 @@ class Hyperparameters:
         return f"{self.lr_initial},{self.lr_final},{self.lr_decay},{self.lr_steps},{self.lr_type},{self.explore_initial},{self.explore_final},{self.explore_decay},{self.explore_steps},{self.explore_type},{self.horizon},{self.discount},{self.batch_size},{self.memory}"
 
     @classmethod
-    def from_csv(cls, val: str):
-        val = val.split(',')
+    def from_csv(cls, str_val: str):
+        val = str_val.split(",")
         params = Hyperparameters()
         params.lr_initial = float(val[0])
         params.lr_final = float(val[1])

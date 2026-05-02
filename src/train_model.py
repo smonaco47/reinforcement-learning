@@ -47,8 +47,16 @@ def evaluate_model(agent, environment, n_eval_episodes=N_EVAL_EPISODES):
     return rewards
 
 
-def run_training(agent, level, iterations, goal_reward=200, seed=0,
-                 max_episode_steps=750, verbose=False, reset=True):
+def run_training(
+    agent,
+    level,
+    iterations,
+    goal_reward=200,
+    seed=0,
+    max_episode_steps=750,
+    verbose=False,
+    reset=True,
+):
     """Core training loop — works for both fresh agents and continuing from a checkpoint."""
     environment = make_environment(level, max_episode_steps, seed=seed)
     result = Results()
@@ -65,10 +73,15 @@ def run_training(agent, level, iterations, goal_reward=200, seed=0,
     return result
 
 
-
-
-def eval_and_watch(agent, level, goal_reward=200, seed=0, max_episode_steps=750,
-                   n_eval_episodes=N_EVAL_EPISODES, watch=True):
+def eval_and_watch(
+    agent,
+    level,
+    goal_reward=200,
+    seed=0,
+    max_episode_steps=750,
+    n_eval_episodes=N_EVAL_EPISODES,
+    watch=True,
+):
     """Evaluate a trained agent deterministically and optionally render episodes."""
     seed_everything(seed + 1)
     eval_env = make_environment(level, max_episode_steps, seed=seed)
@@ -76,7 +89,9 @@ def eval_and_watch(agent, level, goal_reward=200, seed=0, max_episode_steps=750,
     eval_env.close()
 
     eval_mean = sum(eval_rewards) / len(eval_rewards)
-    eval_std = (sum((r - eval_mean) ** 2 for r in eval_rewards) / len(eval_rewards)) ** 0.5
+    eval_std = (
+        sum((r - eval_mean) ** 2 for r in eval_rewards) / len(eval_rewards)
+    ) ** 0.5
     hit_pct = sum(1 for r in eval_rewards if r >= goal_reward) / len(eval_rewards) * 100
     print(f"Eval mean: {eval_mean:.2f} +/- {eval_std:.2f} | Goal hit: {hit_pct:.0f}%")
 
@@ -98,17 +113,32 @@ def eval_and_watch(agent, level, goal_reward=200, seed=0, max_episode_steps=750,
     return eval_mean, eval_std, hit_pct
 
 
-def train_model(level, params, iterations=1500, goal_reward=200, verbose=False, seed=0,
-                max_episode_steps=750, n_eval_episodes=N_EVAL_EPISODES):
+def train_model(
+    level,
+    params,
+    iterations=1500,
+    goal_reward=200,
+    verbose=False,
+    seed=0,
+    max_episode_steps=750,
+    n_eval_episodes=N_EVAL_EPISODES,
+):
     seed_everything(seed)
 
     environment = make_environment(level, max_episode_steps, seed=seed)
     agent = AgentFactory.create_dqn_agent(environment, params, seed=seed)
     environment.close()
 
-    result = run_training(agent, level, iterations, goal_reward=goal_reward,
-                          seed=seed, max_episode_steps=max_episode_steps,
-                          verbose=verbose, reset=True)
+    result = run_training(
+        agent,
+        level,
+        iterations,
+        goal_reward=goal_reward,
+        seed=seed,
+        max_episode_steps=max_episode_steps,
+        verbose=verbose,
+        reset=True,
+    )
 
     eval_env = make_environment(level, max_episode_steps, seed=seed)
     seed_everything(seed + 1)
@@ -116,15 +146,29 @@ def train_model(level, params, iterations=1500, goal_reward=200, verbose=False, 
     eval_env.close()
     result.add_eval(eval_rewards, goal_reward)
 
-    eval_and_watch(agent, level, goal_reward=goal_reward, seed=seed,
-                   max_episode_steps=max_episode_steps, n_eval_episodes=0,
-                   watch=verbose)
+    eval_and_watch(
+        agent,
+        level,
+        goal_reward=goal_reward,
+        seed=seed,
+        max_episode_steps=max_episode_steps,
+        n_eval_episodes=0,
+        watch=verbose,
+    )
 
     return result, agent
 
-    
-def continue_training(agent, level, iterations, goal_reward=200, seed=0,
-                      max_episode_steps=750):
+
+def continue_training(
+    agent, level, iterations, goal_reward=200, seed=0, max_episode_steps=750
+):
     """Continue training an already-loaded agent for additional iterations."""
-    return run_training(agent, level, iterations, goal_reward=goal_reward,
-                        seed=seed, max_episode_steps=max_episode_steps, reset=False)
+    return run_training(
+        agent,
+        level,
+        iterations,
+        goal_reward=goal_reward,
+        seed=seed,
+        max_episode_steps=max_episode_steps,
+        reset=False,
+    )
