@@ -60,6 +60,18 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 Alternatively, skip activation entirely and prefix all commands with `poetry run`.
 
+### 6. Install dev dependencies (type checking)
+
+```powershell
+poetry install --with dev
+```
+
+Run mypy:
+
+```powershell
+poetry run mypy src/
+```
+
 ## Project structure
 
 ```
@@ -69,7 +81,7 @@ Alternatively, skip activation entirely and prefix all commands with `poetry run
 │   ├── results.py          # Tracks episode rewards and eval scores
 │   ├── train_model.py      # Core training and evaluation logic
 │   └── cli.py              # All CLI commands
-├── output/                 # Created automatically — CSVs and saved models
+├── output/                 # Created automatically — CSVs, saved models, run dirs
 ├── pyproject.toml
 └── README.md
 ```
@@ -167,6 +179,51 @@ python -m src.cli analyze --no-plot
 
 ---
 
+### `train-from-csv` — adaptive training from CSV rows
+
+Re-trains rows from `consolidated_output.csv` with automatic early stopping — no need to guess how many iterations to run. Training stops when:
+
+- **Plateau** — `eval_mean` hasn't improved by `--plateau-threshold` in `--plateau-patience` consecutive evals
+- **Solved** — `eval_mean` has stayed above `--success-threshold` for `--success-window` consecutive evals
+- **Hard cap** — `--max-iterations` is reached regardless
+
+Copy any rows you want to re-train from `consolidated_output.csv` into a new file (keep the header row), then run:
+
+```powershell
+python -m src.cli train-from-csv output/my_best_rows.csv
+```
+
+Each run gets its own output directory `output/train_from_csv_<seed>_<timestamp>/` containing:
+- `model_eval<score>.zip` — the trained model
+- `results.txt` — eval summary and hyperparameters
+- `eval_progress.png` — plot of eval_mean over training timesteps (saved to file, not opened)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `INPUT_FILE` | — | CSV file with rows from `consolidated_output.csv` (header required) |
+| `--level` | `LunarLander-v3` | Gymnasium environment ID |
+| `--output-folder` | `output` | Folder for models and plots |
+| `--max-episode-steps` | `750` | Max steps per episode |
+| `--goal-reward` | `200` | Reward threshold |
+| `--n-eval-episodes` | `25` | Episodes per eval checkpoint |
+| `--eval-interval` | `100` | Episodes between eval checkpoints |
+| `--plateau-patience` | `10` | Evals with no improvement before stopping |
+| `--plateau-threshold` | `5.0` | Min improvement to not count as plateau |
+| `--success-threshold` | `250.0` | eval_mean above this counts as solved |
+| `--success-window` | `5` | Consecutive solved evals before stopping |
+| `--max-iterations` | `10000` | Hard cap on training iterations |
+| `--seed` | from CSV | Override the seed from the CSV row |
+
+```powershell
+# train with defaults
+python -m src.cli train-from-csv output/my_best_rows.csv
+
+# longer patience, lower success bar
+python -m src.cli train-from-csv output/my_best_rows.csv --plateau-patience 20 --success-threshold 220
+```
+
+---
+
 ### `run-model` — evaluate or continue training a saved model
 
 Loads a saved model and evaluates it deterministically, optionally continuing training first. Models are saved automatically by `grid-search` when `eval_mean >= goal_reward`, and can be found in `output/model_gs_<seed>_eval<score>.zip`.
@@ -259,6 +316,16 @@ All sources of randomness are seeded via `seed_everything`: Python's `random`, N
 ### Goal threshold
 
 LunarLander-v3 is considered solved at a mean reward of **200** over 100 consecutive episodes. The `eval_hit_pct` column records the percentage of deterministic eval episodes that hit this threshold — a more reliable signal than `eval_mean` alone since a high mean can hide inconsistency.
+
+## Type checking
+
+All source files are typed and checked with mypy strict mode. To run:
+
+```powershell
+poetry run mypy src/
+```
+
+Third-party libraries (SB3, gymnasium, matplotlib, numpy) don't ship complete stubs so `ignore_missing_imports = true` is set in `pyproject.toml`. `warn_return_any = false` is also set to allow `Any` in places where SB3/gymnasium interfaces require it.
 
 ## Notes
 

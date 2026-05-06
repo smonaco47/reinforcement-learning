@@ -2,19 +2,19 @@ from datetime import datetime
 
 
 class Results:
-    def __init__(self):
-        self.results = []
-        self.hit_goal = 0
-        self.eval_mean = None
-        self.eval_std = None
-        self.eval_hit_pct = None
+    def __init__(self) -> None:
+        self.results: list[float] = []
+        self.hit_goal: int = 0
+        self.eval_mean: float | None = None
+        self.eval_std: float | None = None
+        self.eval_hit_pct: float | None = None
 
-    def add_result(self, result, hit_goal=False):
+    def add_result(self, result: float, hit_goal: bool = False) -> None:
         self.results.append(result)
         if hit_goal:
             self.hit_goal += 1
 
-    def add_eval(self, eval_rewards, goal_reward):
+    def add_eval(self, eval_rewards: list[float], goal_reward: float) -> None:
         self.eval_mean = sum(eval_rewards) / len(eval_rewards)
         self.eval_std = (
             sum((r - self.eval_mean) ** 2 for r in eval_rewards) / len(eval_rewards)
@@ -23,7 +23,7 @@ class Results:
             sum(1 for r in eval_rewards if r >= goal_reward) / len(eval_rewards) * 100
         )
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         len_results = len(self.results)
         rewards_to_print = min(len_results, 100)
         avg_rewards = (
@@ -36,7 +36,7 @@ class Results:
             )
 
     @classmethod
-    def csv_header(cls, iterations) -> str:
+    def csv_header(cls, iterations: int) -> str:
         step_size = iterations // 25
         headers = [
             "max",
@@ -49,21 +49,20 @@ class Results:
         headers.extend(str(i) for i in range(step_size, iterations + 1, step_size))
         return ",".join(headers)
 
-    def csv_result(self):
+    def csv_result(self) -> str:
         len_results = len(self.results)
         step_size = len_results // 25
         buckets = [
             sum(self.results[i : i + step_size]) / step_size
             for i in range(0, len_results, step_size)
         ]
-        values = [
+        values: list[float | int] = [
             max(self.results),
             max(buckets),
             self.hit_goal,
-            self.eval_mean if self.eval_mean is not None else 0,
-            self.eval_std if self.eval_std is not None else 0,
-            self.eval_hit_pct if self.eval_hit_pct is not None else 0,
+            self.eval_mean if self.eval_mean is not None else 0.0,
+            self.eval_std if self.eval_std is not None else 0.0,
+            self.eval_hit_pct if self.eval_hit_pct is not None else 0.0,
         ]
         values.extend(buckets)
-        str_values = [str(value) for value in values]
-        return ",".join(str_values)
+        return ",".join(str(v) for v in values)

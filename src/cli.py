@@ -260,6 +260,7 @@ def grid_search(
 
             except Exception as e:
                 click.echo(f"Failed on run {i}: {e}", err=True)
+                raise e
 
 
 # --- analyze ---
@@ -328,14 +329,14 @@ def analyze(output_folder, no_plot, no_save):
         def col_data(col):
             return data[:, KEEP_COLUMNS.index(col)].astype(np.float64)
 
-        eval_mean = col_data("eval_mean")
+        x = col_data("eval_hit_pct")
         fig, axs = plt.subplots(
             len(PLOT_KEYS), figsize=(8, 2 * len(PLOT_KEYS)), sharex="all"
         )
         fig.suptitle("Hyperparameter Results")
         for idx, key in enumerate(PLOT_KEYS):
             d = col_data(key)
-            axs[idx].scatter(eval_mean, d, alpha=0.6)
+            axs[idx].scatter(x, d, alpha=0.6)
             axs[idx].set(ylabel=key)
             if max(d) < 1:
                 axs[idx].set(yscale="log")
@@ -375,16 +376,10 @@ def analyze(output_folder, no_plot, no_save):
     help="Episodes for deterministic evaluation",
 )
 @click.option(
-    "--iterations",
-    default=0,
-    show_default=True,
-    help="Additional training iterations before eval (0 = eval only)",
-)
-@click.option(
     "--seed",
     default=0,
     show_default=True,
-    help="Random seed for eval/additional training",
+    help="Random seed (auto-detected from filename if present)",
 )
 @click.option(
     "--watch/--no-watch",
@@ -392,91 +387,35 @@ def analyze(output_folder, no_plot, no_save):
     show_default=True,
     help="Watch rendered episodes after eval",
 )
-@click.option(
-    "--csv-row",
-    default=None,
-    help="Row from consolidated_output.csv to reconstruct full hyperparameter schedule for continued training. "
-    "Copy the full CSV row as a quoted string.",
-)
-@click.option(
-    "--output-folder",
-    default="output",
-    show_default=True,
-    help="Output folder — used to locate consolidated_output.csv header when --csv-row is set",
-)
 def run_model(
-    model_path,
-    level,
-    max_episode_steps,
-    goal_reward,
-    n_eval_episodes,
-    iterations,
-    seed,
-    watch,
-    csv_row,
-    output_folder,
+    model_path, level, max_episode_steps, goal_reward, n_eval_episodes, seed, watch
 ):
-    """Load a saved model and evaluate it, optionally with additional training.
+    """Load a saved model and evaluate it deterministically.
 
     MODEL_PATH is the path to the saved model zip, e.g. output/model_gs_12345_eval210
 
-    By default, continued training uses the hyperparameters baked into the saved model
-    (discount, batch_size, current LR). Pass --csv-row with the original row from
-    consolidated_output.csv to reconstruct the full LR and exploration schedules from
-    scratch, which gives more meaningful continued training.
-
     Examples:
 
-        # just eval and watch
-        python -m src.cli run-best output/model_gs_12345_eval210
-
-        # continue training with baked-in hyperparameters
-        python -m src.cli run-best output/model_gs_12345_eval210 --iterations 1500
-
-        # continue training with full schedule reconstruction
-        python -m src.cli run-best output/model_gs_12345_eval210 --iterations 1500 --csv-row "42,0.001,..."
-
-        # eval only, no render
-        python -m src.cli run-best output/model_gs_12345_eval210 --no-watch
+        python -m src.cli run-model output/model_gs_12345_eval210
+        python -m src.cli run-model output/model_gs_12345_eval210 --no-watch --n-eval-episodes 100
     """
-    from stable_baselines3 import DQN
-    from src.train_model import (
-        make_environment,
-        seed_everything,
-        continue_training,
-        eval_and_watch,
-    )
-
-    # Resolve seed — prefer the seed embedded in the model filename if present
-    model_seed = seed
     import re
+    from stable_baselines3 import DQN
+    from src.train_model import make_environment, seed_everything, eval_and_watch
 
+    model_seed = seed
     match = re.search(r"model_gs_(\d+)_eval", model_path)
     if match:
         model_seed = int(match.group(1))
         click.echo(f"Using seed {model_seed} from model filename")
 
     seed_everything(model_seed)
-
-    click.echo(f"Loading model from {model_path}...")
     env = make_environment(level, max_episode_steps, seed=model_seed)
     agent = DQN.load(model_path, env=env)
     env.close()
 
-    if iterations > 0:
-        click.echo(f"Running {iterations} additional training iterations...")
-        result = continue_training(
-            agent,
-            level,
-            iterations,
-            goal_reward=goal_reward,
-            seed=model_seed,
-            max_episode_steps=max_episode_steps,
-        )
-        click.echo(f"Training complete — {result.hit_goal} goal hits")
-
     click.echo(f"Evaluating over {n_eval_episodes} deterministic episodes...")
-    eval_mean, eval_std, hit_pct = eval_and_watch(
+    eval_and_watch(
         agent,
         level,
         goal_reward=goal_reward,
@@ -486,23 +425,250 @@ def run_model(
         watch=watch,
     )
 
-    # Only save if additional training was done and the eval score improved
-    if iterations > 0:
-        original_score = int(match.group(2)) if match and match.lastindex >= 2 else None
-        # Re-parse score from filename: model_gs_<seed>_eval<score>
-        score_match = re.search(r"_eval(\d+)", model_path)
-        original_score = int(score_match.group(1)) if score_match else None
 
-        if original_score is None or eval_mean > original_score:
-            updated_name = f"{output_folder}/model_gs_{model_seed}_eval{eval_mean:.0f}"
-            agent.save(updated_name)
-            click.echo(
-                f"Saved updated model to {updated_name}.zip (improved from {original_score} → {eval_mean:.0f})"
-            )
-        else:
-            click.echo(
-                f"No improvement ({original_score} → {eval_mean:.0f}) — model not saved"
-            )
+# --- train-from-csv ---
+
+
+@cli.command()
+@click.argument("csv-file")
+@click.option(
+    "--level",
+    default="LunarLander-v3",
+    show_default=True,
+    help="Gymnasium environment ID",
+)
+@click.option(
+    "--max-episode-steps", default=750, show_default=True, help="Max steps per episode"
+)
+@click.option(
+    "--goal-reward",
+    default=200.0,
+    show_default=True,
+    help="Reward threshold to count as goal hit",
+)
+@click.option(
+    "--n-eval-episodes",
+    default=25,
+    show_default=True,
+    help="Episodes per eval checkpoint",
+)
+@click.option(
+    "--eval-interval",
+    default=100,
+    show_default=True,
+    help="Training iterations between evals",
+)
+@click.option(
+    "--plateau-window",
+    default=5,
+    show_default=True,
+    help="Evals with no improvement before stopping",
+)
+@click.option(
+    "--plateau-threshold",
+    default=2.0,
+    show_default=True,
+    help="Min eval_mean improvement to not be stalled",
+)
+@click.option(
+    "--solved-threshold",
+    default=250.0,
+    show_default=True,
+    help="eval_mean considered solved",
+)
+@click.option(
+    "--solved-window",
+    default=3,
+    show_default=True,
+    help="Consecutive evals above threshold to stop",
+)
+@click.option(
+    "--max-iterations",
+    default=10000,
+    show_default=True,
+    help="Hard cap on training iterations",
+)
+@click.option(
+    "--output-folder",
+    default="output",
+    show_default=True,
+    help="Folder to save models and plots",
+)
+@click.option(
+    "--consolidated-csv",
+    default="output/consolidated_output.csv",
+    show_default=True,
+    help="consolidated_output.csv to read headers from",
+)
+def train_from_csv(
+    csv_file,
+    level,
+    max_episode_steps,
+    goal_reward,
+    n_eval_episodes,
+    eval_interval,
+    plateau_window,
+    plateau_threshold,
+    solved_threshold,
+    solved_window,
+    max_iterations,
+    output_folder,
+    consolidated_csv,
+):
+    """Train models from hyperparameter rows in a CSV file until solved or stalled.
+
+    CSV_FILE should contain rows in the same format as consolidated_output.csv —
+    just copy the rows you want to re-train directly from that file.
+
+    Stopping conditions (whichever comes first):
+      - Stalled: eval_mean hasn't improved by --plateau-threshold in --plateau-window evals
+      - Solved: eval_mean >= --solved-threshold for --solved-window consecutive evals
+      - Max: --max-iterations reached
+
+    For each row, saves the model and a plot of eval_mean over training to output/.
+    """
+    import re
+    import matplotlib
+
+    matplotlib.use("Agg")  # non-interactive backend — don't open windows
+    import matplotlib.pyplot as plt
+    from src.train_model import (
+        make_environment,
+        seed_everything,
+        train_until_solved,
+        eval_and_watch,
+    )
+    from src.agent import AgentFactory
+
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Read header from consolidated_output.csv
+    with open(consolidated_csv, "r") as f:
+        headers = next(csv.reader(f))
+
+    seed_idx = headers.index("seed")
+    param_cols = [
+        "lr_initial",
+        "lr_final",
+        "lr_decay",
+        "lr_steps",
+        "lr_type",
+        "explore_initial",
+        "explore_final",
+        "explore_decay",
+        "explore_steps",
+        "explore_type",
+        "horizon",
+        "discount",
+        "batch_size",
+        "memory",
+    ]
+    param_indices = [headers.index(col) for col in param_cols]
+
+    # Read rows to train from
+    with open(csv_file, "r") as f:
+        rows = [line.strip() for line in f if line.strip()]
+
+    click.echo(f"Found {len(rows)} row(s) to train")
+
+    for row_num, line in enumerate(rows, start=1):
+        parts = line.split(",")
+        seed = int(parts[seed_idx])
+        params_str = ",".join(parts[idx] for idx in param_indices)
+        params = Hyperparameters.from_csv(params_str)
+
+        click.echo(
+            f"[{row_num}/{len(rows)}] seed={seed} lr={params.lr_initial:.2e} "
+            f"discount={params.discount:.3f} batch={params.batch_size}"
+        )
+
+        seed_everything(seed)
+        env = make_environment(level, max_episode_steps, seed=seed)
+        agent = AgentFactory.create_dqn_agent(env, params, seed=seed)
+        env.close()
+
+        eval_means, eval_steps, agent = train_until_solved(
+            agent=agent,
+            level=level,
+            params=params,
+            seed=seed,
+            max_episode_steps=max_episode_steps,
+            goal_reward=goal_reward,
+            n_eval_episodes=n_eval_episodes,
+            eval_interval=eval_interval,
+            plateau_window=plateau_window,
+            plateau_threshold=plateau_threshold,
+            solved_threshold=solved_threshold,
+            solved_window=solved_window,
+            max_iterations=max_iterations,
+        )
+
+        final_eval = eval_means[-1] if eval_means else 0.0
+        stop_reason = (
+            "solved"
+            if len(eval_means) >= solved_window
+            and all(e >= solved_threshold for e in eval_means[-solved_window:])
+            else "stalled"
+            if len(eval_means) >= plateau_window
+            else "max_iterations"
+        )
+
+        # Save model
+        model_name = (
+            f"{output_folder}/model_csv_{row_num}_seed{seed}_eval{final_eval:.0f}"
+        )
+        agent.save(model_name)
+        click.echo(
+            f"Saved model to {model_name}.zip (stop={stop_reason}, final_eval={final_eval:.1f})"
+        )
+
+        # Save eval_mean plot
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(eval_steps, eval_means, marker="o", markersize=3, linewidth=1.5)
+        ax.axhline(
+            y=solved_threshold,
+            color="green",
+            linestyle="--",
+            alpha=0.7,
+            label=f"solved ({solved_threshold})",
+        )
+        ax.axhline(
+            y=goal_reward,
+            color="orange",
+            linestyle="--",
+            alpha=0.7,
+            label=f"goal ({goal_reward})",
+        )
+        ax.set_xlabel("Training iterations")
+        ax.set_ylabel("Eval mean reward")
+        ax.set_title(
+            f"Row {row_num} | seed={seed} | lr={params.lr_initial:.2e} | "
+            f"discount={params.discount:.3f} | stop={stop_reason}"
+        )
+        ax.legend()
+        ax.grid(True)
+        plt.tight_layout()
+        plot_path = f"{output_folder}/plot_csv_{row_num}_seed{seed}.png"
+        plt.savefig(plot_path, dpi=150)
+        plt.close()
+        click.echo(f"Saved plot to {plot_path}")
+
+        # Print hyperparameter summary
+        click.echo(
+            f"  lr_initial={params.lr_initial:.2e}  lr_final={params.lr_final:.2e}  "
+            f"lr_steps={params.lr_steps}  lr_type={params.lr_type}"
+        )
+        click.echo(
+            f"  explore_initial={params.explore_initial:.3f}  explore_final={params.explore_final:.4f}  "
+            f"explore_steps={params.explore_steps}"
+        )
+        click.echo(
+            f"  discount={params.discount:.3f}  horizon={params.horizon}  "
+            f"batch_size={params.batch_size}  memory={params.memory}"
+        )
+        click.echo(
+            f"  final eval_mean={final_eval:.2f}  iterations={eval_steps[-1] if eval_steps else 0}"
+        )
 
 
 if __name__ == "__main__":
