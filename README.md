@@ -148,11 +148,11 @@ python -m src.cli grid-search
 # unlimited runs
 python -m src.cli grid-search --limit 0
 
-# longer training per run
+# longer training per run — recommended for better convergence
 python -m src.cli grid-search --iterations 3000 --limit 100
 
-# second-stage narrow search
-python -m src.cli grid-search --narrow --lr-initial-min 5e-4 --lr-initial-max 1e-2 --discount-min 0.95
+# narrow search with high discount — the most effective configuration found
+python -m src.cli grid-search --iterations 3000 --narrow --discount-min 0.98 --discount-max 1.0
 ```
 
 ---
@@ -174,7 +174,6 @@ python -m src.cli analyze
 ```powershell
 # just consolidate, no plot
 python -m src.cli analyze --no-plot
-
 ```
 
 ---
@@ -205,10 +204,10 @@ Each run gets its own output directory `output/train_from_csv_<seed>_<timestamp>
 | `--output-folder` | `output` | Folder for models and plots |
 | `--max-episode-steps` | `750` | Max steps per episode |
 | `--goal-reward` | `200` | Reward threshold |
-| `--n-eval-episodes` | `25` | Episodes per eval checkpoint |
+| `--n-eval-episodes` | `50` | Episodes per eval checkpoint — higher values give more stable signal |
 | `--eval-interval` | `100` | Episodes between eval checkpoints |
 | `--plateau-patience` | `10` | Evals with no improvement before stopping |
-| `--plateau-threshold` | `5.0` | Min improvement to not count as plateau |
+| `--plateau-threshold` | `20.0` | Min improvement to not count as plateau — set higher than eval noise (~30-50 pts) |
 | `--success-threshold` | `250.0` | eval_mean above this counts as solved |
 | `--success-window` | `5` | Consecutive solved evals before stopping |
 | `--max-iterations` | `10000` | Hard cap on training iterations |
@@ -218,15 +217,19 @@ Each run gets its own output directory `output/train_from_csv_<seed>_<timestamp>
 # train with defaults
 python -m src.cli train-from-csv output/my_best_rows.csv
 
-# longer patience, lower success bar
-python -m src.cli train-from-csv output/my_best_rows.csv --plateau-patience 20 --success-threshold 220
+# more conservative stopping — good for runs that are close but not consistent
+python -m src.cli train-from-csv output/my_best_rows.csv --plateau-patience 15 --plateau-threshold 20 --n-eval-episodes 50
 ```
+
+**Note on plateau threshold:** With 25 eval episodes, `eval_mean` has a natural variance of 30-50 points between checkpoints even when the policy hasn't changed. Set `--plateau-threshold` above this noise floor — `20.0` is a reasonable minimum, and increasing `--n-eval-episodes` to 50-100 gives a more stable signal that makes lower thresholds meaningful.
 
 ---
 
-### `run-model` — evaluate or continue training a saved model
+### `run-model` — evaluate a saved model
 
-Loads a saved model and evaluates it deterministically, optionally continuing training first. Models are saved automatically by `grid-search` when `eval_mean >= goal_reward`, and can be found in `output/model_gs_<seed>_eval<score>.zip`.
+Loads a saved model and evaluates it deterministically. Models saved by `grid-search` are named `output/model_gs_<seed>_eval<score>.zip`. Models saved by `train-from-csv` are in their own run directory.
+
+The seed is auto-detected from the model filename so you don't need to pass `--seed` for models saved by `grid-search`.
 
 ```powershell
 python -m src.cli run-model MODEL_PATH
@@ -236,82 +239,68 @@ python -m src.cli run-model MODEL_PATH
 |--------|---------|-------------|
 | `MODEL_PATH` | — | Path to saved model zip, e.g. `output/model_gs_12345_eval210` |
 | `--level` | `LunarLander-v3` | Gymnasium environment ID |
-| `--iterations` | `0` | Additional training iterations (0 = eval only) |
 | `--max-episode-steps` | `750` | Max steps per episode |
 | `--goal-reward` | `200` | Reward threshold to count as goal hit |
-| `--seed` | `0` | Fallback seed — auto-detected from filename if model is named `model_gs_<seed>_eval<score>` |
+| `--seed` | `0` | Fallback seed — auto-detected from filename if present |
 | `--n-eval-episodes` | `25` | Episodes for deterministic evaluation |
 | `--watch/--no-watch` | `--watch` | Watch rendered episodes after eval |
-| `--csv-row` | none | Full CSV row from `consolidated_output.csv` to reconstruct original hyperparameter schedules |
-| `--output-folder` | `output` | Used to locate `consolidated_output.csv` header when `--csv-row` is set |
 
 ```powershell
-# eval and watch (seed auto-detected from filename)
+# eval and watch
 python -m src.cli run-model output/model_gs_12345_eval210
-
-# continue training with baked-in hyperparameters then eval
-python -m src.cli run-model output/model_gs_12345_eval210 --iterations 1500
-
-# retrain from scratch with full schedule reconstruction
-python -m src.cli run-model output/model_gs_12345_eval210 --iterations 3000 --csv-row "12345,0.00731,..."
 
 # eval only, no render, more episodes for a reliable score
 python -m src.cli run-model output/model_gs_12345_eval210 --no-watch --n-eval-episodes 100
 ```
 
-**Two modes of continued training:**
-
-Without `--csv-row`, training continues from the saved checkpoint using the hyperparameters baked into the model (discount, batch size, current LR). This is best when the model is already performing well and you just want more training time.
-
-With `--csv-row`, the original LR and exploration schedules are reconstructed from the CSV row and training starts fresh with those hyperparameters. This is better when you want to retrain from scratch with a known-good configuration for more iterations than the grid search used. Copy the full row directly from `consolidated_output.csv`.
-
 ---
 
 ## Recommended workflow
 
-1. **Wide search** — run `grid-search` for 200–300 iterations with default settings. Models that solve the environment are saved automatically.
+1. **Wide search** — run `grid-search --iterations 3000` for 100-200 iterations. Models that hit `eval_mean >= 200` are saved automatically.
 
-2. **Analyze** — run `analyze` to plot correlations. Look at the scatter plots to identify which hyperparameters correlate with high `eval_mean`.
+2. **Analyze** — run `analyze` to generate `consolidated_output.csv` and scatter plots. Sort by `eval_mean` to find the best configs. Look for hyperparameters that correlate with high scores.
 
-3. **Narrow search** — run `grid-search --narrow` with the promising ranges from step 2. Another 100–200 iterations is usually enough.
+3. **Narrow search** — run `grid-search --narrow` with the ranges from step 2. `--discount-min 0.98` is strongly recommended based on empirical results — high discount is the clearest signal for LunarLander.
 
-4. **Evaluate saved models** — use `run-model` on any `.zip` model saved by `grid-search` to watch it land and get a reliable eval score over more episodes.
+4. **Adaptive re-training** — use `train-from-csv` on your best rows to train longer with automatic stopping. Each run saves a model, summary, and progress plot.
 
-5. **Continue training** — if a model is close but not consistent, use `run-model --iterations 1500` to continue from the checkpoint with baked-in hyperparameters, or pass `--csv-row` to retrain from scratch with the full original schedule.
+5. **Evaluate** — use `run-model` on saved models to watch the agent land and get a reliable eval score over more episodes.
 
-## Second-stage focused search
-
-After running 50-100 initial grid search iterations, run `analyze` to plot hyperparameter correlations and identify promising ranges. From early results, the clearest signals are:
-
-- `lr_initial` below `1e-4` consistently produces poor results — keep it above `5e-4`
-- High `discount` (0.99–1.0) appears in the best runs
-
-```powershell
-python -m src.cli grid-search --narrow --lr-initial-min 5e-4 --lr-initial-max 1e-2 --discount-min 0.95
-```
+---
 
 ## How it works
 
 ### Hyperparameter search
 
-`Hyperparameters.randomize()` samples random values for learning rate, exploration schedule, batch size, replay buffer size, discount factor, and horizon using log-uniform sampling for exponential parameters (learning rate, exploration) so each order of magnitude gets equal representation. The grid search trains a fresh agent for each combination and records both the noisy training rewards and a clean deterministic evaluation score (`eval_mean`, `eval_std`, `eval_hit_pct`) after training. This means the CSV reflects true policy performance rather than training noise.
+`Hyperparameters.randomize()` samples random values for learning rate, exploration schedule, batch size, replay buffer size, and discount factor. Exponential parameters (learning rate, exploration) use log-uniform sampling so each order of magnitude gets equal representation. The grid search trains a fresh agent for each combination and records a clean deterministic evaluation score (`eval_mean`, `eval_std`, `eval_hit_pct`) after training, so the CSV reflects true policy performance rather than training noise.
+
+### Key findings
+
+Through empirical grid search, the most important hyperparameters for LunarLander-v3 turned out to be:
+
+- **`discount >= 0.98`** — the single strongest signal. LunarLander requires long-horizon planning to connect early stabilization to the final landing reward. Low discount prevents the agent from learning this.
+- **`lr_initial` in `[5e-4, 1e-2]`** — values below `1e-4` consistently fail to learn.
+- **`memory >= 50000`** — smaller buffers get overwritten too quickly for stable learning.
+- **`iterations >= 3000`** — 1500 iterations is often not enough to converge.
 
 ### Algorithm
 
-The agent uses [DQN](https://stable-baselines3.readthedocs.io/en/master/modules/dqn.html) from Stable Baselines3, which enables double-Q learning by default. The learning rate follows either a linear or exponential decay schedule over training. Exploration uses epsilon-greedy decay from `explore_initial` down to `explore_final`.
+The agent uses [DQN](https://stable-baselines3.readthedocs.io/en/master/modules/dqn.html) from Stable Baselines3, which enables double-Q learning by default. The learning rate follows either a linear or exponential decay schedule. Exploration uses epsilon-greedy decay from `explore_initial` down to `explore_final`, scaled correctly to the actual training budget so exploration doesn't collapse early.
 
 ### Training architecture
 
-`train_model.py` has a single core training loop (`run_training`) shared by both fresh training and continued training from a checkpoint:
+`train_model.py` has a single core training loop (`run_training`) shared by all training paths:
 
 - **`run_training`** — the core loop. Calls `agent.learn` and returns a `Results` object. The `reset` flag distinguishes fresh training from continuation.
-- **`continue_training`** — thin wrapper around `run_training(reset=False)`, used by `run-model`.
-- **`train_model`** — creates the agent, calls `run_training(reset=True)`, then evaluates.
-- **`eval_and_watch`** — deterministic evaluation and optional rendering, used by both `train_model` and `run-model`.
+- **`train_model`** — creates the agent, calls `run_training(reset=True)`, then evaluates. Used by `grid-search` and `train`.
+- **`train_adaptive`** — creates an agent and runs `agent.learn` with `AdaptiveStopCallback`, which stops on plateau or consistent success. Used by `train-from-csv`.
+- **`eval_and_watch`** — deterministic evaluation and optional rendering, used by `train_model` and `run-model`.
+- **`continue_training`** — thin wrapper around `run_training(reset=False)` for continuing from a checkpoint.
 
 ### Reproducibility
 
-All sources of randomness are seeded via `seed_everything`: Python's `random`, NumPy, PyTorch (including CUDA), and `PYTHONHASHSEED`. `torch.backends.cudnn.deterministic = True` forces deterministic CUDA operations. The eval phase uses `seed + 1` so eval results are reproducible independently of training length. Note that perfect reproducibility across different hardware or library versions is not guaranteed by PyTorch.
+All sources of randomness are seeded via `seed_everything`: Python's `random`, NumPy, PyTorch (including CUDA), and `PYTHONHASHSEED`. `torch.backends.cudnn.deterministic = True` forces deterministic CUDA operations. The eval phase uses `seed + 1` so eval results are reproducible independently of training length. The seed used for each grid search run is recorded in the CSV and auto-detected from saved model filenames. Note that perfect reproducibility across different hardware or library versions is not guaranteed by PyTorch.
 
 ### Goal threshold
 
@@ -319,7 +308,7 @@ LunarLander-v3 is considered solved at a mean reward of **200** over 100 consecu
 
 ## Type checking
 
-All source files are typed and checked with mypy strict mode. To run:
+All source files are typed and checked with mypy strict mode:
 
 ```powershell
 poetry run mypy src/
@@ -331,3 +320,4 @@ Third-party libraries (SB3, gymnasium, matplotlib, numpy) don't ship complete st
 
 - The original implementation used [Tensorforce](https://github.com/tensorforce/tensorforce), which is no longer maintained and incompatible with Python 3.11+. It was replaced with Stable Baselines3.
 - The original used `gym` (OpenAI). This project uses `gymnasium` (the maintained Farama fork).
+- Several bugs in the original port caused poor grid search performance: exploration fraction was hardcoded to 1500 iterations regardless of actual training length, `train_freq` was tied to `batch_size` causing infrequent updates, the replay buffer minimum was too small at 10k, and a `horizon` parameter was being searched over but had no effect on SB3 DQN. Fixing these dramatically improved results.
