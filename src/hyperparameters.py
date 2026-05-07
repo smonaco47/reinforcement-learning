@@ -21,12 +21,8 @@ class Hyperparameters:
     explore_type: str = "exponential"
 
     batch_size: int = 64
-    memory: int = (
-        50_000  # minimum 50k — smaller buffers don't work well for LunarLander
-    )
+    memory: int = 50_000
     discount: float = 1.0
-
-    # horizon removed — SB3 DQN doesn't use it; was silently ignored in training
 
     def randomize(self, steps: int = 1000) -> None:
         lr_range = self.random_range_exponential(-6, -3)
@@ -43,9 +39,10 @@ class Hyperparameters:
             self.explore_initial, self.explore_final, self.explore_steps
         )
 
-        self.discount = random.choice([x / 100 for x in range(50, 101)])
+        self.discount = random.choice([x / 100 for x in range(90, 101)])
+
         self.batch_size = 2 ** random.randint(4, 8)
-        self.memory = random.choice([50_000, 100_000])  # minimum 50k
+        self.memory = random.choice([50_000, 100_000, 200_000])
 
     def randomize_narrow(
         self,
@@ -54,23 +51,11 @@ class Hyperparameters:
         lr_final_range: tuple[float, float] = (1e-6, 1e-4),
         explore_initial_range: tuple[float, float] = (0.05, 0.3),
         explore_final_range: tuple[float, float] = (0.001, 0.05),
-        discount_range: tuple[float, float] = (0.90, 1.0),
+        discount_range: tuple[float, float] = (0.95, 1.0),
         batch_sizes: tuple[int, ...] = (32, 64, 128),
-        memories: tuple[int, ...] = (50_000, 100_000),  # minimum 50k
+        memories: tuple[int, ...] = (50000, 100000, 200000),
     ) -> None:
-        """
-        Second-stage randomization with narrowed bounds based on what worked well
-        in the first-stage grid search. After analyzing results, pass in the ranges
-        that correlated with high eval_mean.
-
-        Example usage after analyzing results:
-            params.randomize_narrow(
-                steps=1500,
-                lr_initial_range=(1e-4, 1e-3),
-                discount_range=(0.95, 1.0),
-                batch_sizes=(64, 128),
-            )
-        """
+        """Second-stage randomization with narrowed bounds based on first-stage results."""
         self.lr_initial = log_uniform(*lr_initial_range)
         self.lr_final = log_uniform(*lr_final_range)
         if self.lr_final >= self.lr_initial:
@@ -134,19 +119,9 @@ class Hyperparameters:
         params.explore_decay = float(val[7])
         params.explore_steps = int(val[8])
         params.explore_type = val[9]
-        # Note: horizon was removed — old CSVs had it at index 10, so
-        # from_csv checks length to stay backward compatible
-        if len(val) == 14:
-            # old format with horizon
-            params.discount = float(val[11])
-            params.batch_size = int(val[12])
-            params.memory = int(val[13])
-        else:
-            # new format without horizon
-            params.discount = float(val[10])
-            params.batch_size = int(val[11])
-            params.memory = int(val[12])
-        params.memory = max(params.memory, 50_000)
+        params.discount = float(val[10])
+        params.batch_size = int(val[11])
+        params.memory = int(val[12])
         return params
 
     @classmethod

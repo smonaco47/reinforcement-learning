@@ -1,7 +1,7 @@
 from src.hyperparameters import Hyperparameters
 
 
-def test_randomization():
+def test_randomization() -> None:
     hyperparameters = Hyperparameters()
     hyperparameters.randomize()
 
@@ -12,7 +12,7 @@ def test_randomization():
     assert hyperparameters.explore_type in ["linear", "exponential"]
 
 
-def test_randomization_loop():
+def test_randomization_loop() -> None:
     hp = Hyperparameters()
     for i in range(10):
         hp.randomize()
@@ -29,7 +29,7 @@ def test_randomization_loop():
     # assert False
 
 
-def test_exponent_range():
+def test_exponent_range() -> None:
     range = Hyperparameters.random_range_exponential(-6, -3)
 
     assert range[1] >= range[0]
@@ -37,13 +37,13 @@ def test_exponent_range():
     assert range[1] < 9e-3
 
 
-def test_decay():
+def test_decay() -> None:
     decay = Hyperparameters.random_decay()
 
     assert 0.8 < decay
     assert decay < 1
 
 
-def test_decay_calc():
+def test_decay_calc() -> None:
     decay = Hyperparameters.calc_decay(1, (1 / 16), 4)
     assert decay == 0.5

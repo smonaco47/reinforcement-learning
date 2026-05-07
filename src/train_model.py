@@ -6,6 +6,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 from stable_baselines3 import DQN
+from stable_baselines3.common.callbacks import BaseCallback
 
 from src.agent import AgentFactory, HitGoalCallback
 from src.hyperparameters import Hyperparameters
@@ -27,7 +28,7 @@ def seed_everything(seed: int) -> None:
 
 def make_environment(
     level: str, max_episode_steps: int, seed: int = 0, render: bool = False
-) -> gym.Env[Any, Any]:
+) -> gym.Env:  # type: ignore[type-arg]
     render_mode = "human" if render else None
     env = gym.make(level, max_episode_steps=max_episode_steps, render_mode=render_mode)
     env.reset(seed=seed)
@@ -36,7 +37,7 @@ def make_environment(
 
 def evaluate_model(
     agent: DQN,
-    environment: gym.Env[Any, Any],
+    environment: gym.Env,  # type: ignore[type-arg]
     n_eval_episodes: int = N_EVAL_EPISODES,
 ) -> list[float]:
     """Run deterministic episodes to get a clean measure of policy performance."""
@@ -58,13 +59,13 @@ def run_training(
     agent: DQN,
     level: str,
     iterations: int,
-    goal_reward: float = 200.0,
+    goal_reward: float = 200,
     seed: int = 0,
     max_episode_steps: int = 750,
     verbose: bool = False,
     reset: bool = True,
 ) -> Results:
-    """Core training loop — works for both fresh agents and continuing from a checkpoint."""
+    """Core training loop — works for fresh agents and continuing from a checkpoint."""
     environment = make_environment(level, max_episode_steps, seed=seed)
     result = Results()
     callback = HitGoalCallback(result, goal_reward, verbose=verbose)
@@ -83,7 +84,7 @@ def run_training(
 def eval_and_watch(
     agent: DQN,
     level: str,
-    goal_reward: float = 200.0,
+    goal_reward: float = 200,
     seed: int = 0,
     max_episode_steps: int = 750,
     n_eval_episodes: int = N_EVAL_EPISODES,
@@ -124,7 +125,7 @@ def train_model(
     level: str,
     params: Hyperparameters,
     iterations: int = 1500,
-    goal_reward: float = 200.0,
+    goal_reward: float = 200,
     verbose: bool = False,
     seed: int = 0,
     max_episode_steps: int = 750,
@@ -132,8 +133,13 @@ def train_model(
 ) -> tuple[Results, DQN]:
     seed_everything(seed)
 
+    avg_episode_steps = max_episode_steps // 3
+    total_timesteps = iterations * avg_episode_steps
+
     environment = make_environment(level, max_episode_steps, seed=seed)
-    agent = AgentFactory.create_dqn_agent(environment, params, seed=seed)
+    agent = AgentFactory.create_dqn_agent(
+        environment, params, seed=seed, total_timesteps=total_timesteps
+    )
     environment.close()
 
     result = run_training(
@@ -166,7 +172,7 @@ def continue_training(
     agent: DQN,
     level: str,
     iterations: int,
-    goal_reward: float = 200.0,
+    goal_reward: float = 200,
     seed: int = 0,
     max_episode_steps: int = 750,
 ) -> Results:
@@ -182,96 +188,130 @@ def continue_training(
     )
 
 
-def train_until_solved(
-    agent: DQN,
+class AdaptiveStopCallback(BaseCallback):
+    """
+    Stops training when either:
+    - eval_mean hasn't improved by plateau_threshold in plateau_patience consecutive evals
+    - eval_mean has stayed above success_threshold for success_window consecutive evals
+    Evaluates every eval_interval timesteps.
+    """
+
+    def __init__(
+        self,
+        eval_env: gym.Env,  # type: ignore[type-arg]
+        goal_reward: float,
+        eval_interval: int,
+        n_eval_episodes: int,
+        plateau_patience: int,
+        plateau_threshold: float,
+        success_threshold: float,
+        success_window: int,
+        verbose: bool = False,
+    ) -> None:
+        super().__init__(verbose=verbose)
+        self.eval_env = eval_env
+        self.goal_reward = goal_reward
+        self.eval_interval = eval_interval
+        self.n_eval_episodes = n_eval_episodes
+        self.plateau_patience = plateau_patience
+        self.plateau_threshold = plateau_threshold
+        self.success_threshold = success_threshold
+        self.success_window = success_window
+
+        self.eval_history: list[tuple[int, float]] = []
+        self._best_eval: float = float("-inf")
+        self._no_improvement_count: int = 0
+        self._success_count: int = 0
+        self._last_eval_step: int = 0
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps - self._last_eval_step < self.eval_interval:
+            return True
+        self._last_eval_step = self.num_timesteps
+
+        rewards = evaluate_model(self.model, self.eval_env, self.n_eval_episodes)  # type: ignore[arg-type]
+        eval_mean = sum(rewards) / len(rewards)
+        self.eval_history.append((self.num_timesteps, eval_mean))
+
+        if self.verbose:
+            print(f"  [eval @ {self.num_timesteps}] mean={eval_mean:.1f}")
+
+        # Check success
+        if eval_mean >= self.success_threshold:
+            self._success_count += 1
+            if self._success_count >= self.success_window:
+                print(
+                    f"  [STOP] Consistently above {self.success_threshold} for {self.success_window} evals"
+                )
+                return False
+        else:
+            self._success_count = 0
+
+        # Check plateau
+        if eval_mean > self._best_eval + self.plateau_threshold:
+            self._best_eval = eval_mean
+            self._no_improvement_count = 0
+        else:
+            self._no_improvement_count += 1
+            if self._no_improvement_count >= self.plateau_patience:
+                print(
+                    f"  [STOP] No improvement in {self.plateau_patience} evals (best={self._best_eval:.1f})"
+                )
+                return False
+
+        return True
+
+
+def train_adaptive(
     level: str,
     params: Hyperparameters,
     seed: int = 0,
     max_episode_steps: int = 750,
-    goal_reward: float = 200.0,
+    goal_reward: float = 200,
     n_eval_episodes: int = 25,
-    eval_interval: int = 100,  # evaluate every N iterations
-    plateau_window: int = 5,  # evals with no improvement before stopping
-    plateau_threshold: float = 2.0,  # min improvement in eval_mean to not be stalled
-    solved_threshold: float = 250.0,  # eval_mean considered "solved"
-    solved_window: int = 3,  # consecutive evals above threshold to stop
-    max_iterations: int = 10000,  # hard cap
-) -> tuple[list[float], list[int], DQN]:
+    eval_interval_episodes: int = 100,
+    plateau_patience: int = 10,
+    plateau_threshold: float = 5.0,
+    success_threshold: float = 250.0,
+    success_window: int = 5,
+    max_iterations: int = 10000,
+) -> tuple[DQN, list[tuple[int, float]]]:
     """
-    Train until one of three conditions:
-    - Stalled: eval_mean hasn't improved by plateau_threshold in plateau_window evals
-    - Solved: eval_mean >= solved_threshold for solved_window consecutive evals
-    - Max: max_iterations reached
-
-    Returns (eval_means, eval_steps, agent).
+    Train until plateau or consistent success, with a max iteration cap.
+    Returns the trained agent and eval history as (timestep, eval_mean) pairs.
     """
-    eval_means: list[float] = []
-    eval_steps: list[int] = []
-    best_eval: float = float("-inf")
-    stall_count: int = 0
-    solved_count: int = 0
-    total_iterations: int = 0
+    seed_everything(seed)
 
-    print(
-        f"Training with early stopping — plateau_window={plateau_window}, "
-        f"solved_threshold={solved_threshold}, max_iterations={max_iterations}"
+    avg_episode_steps = max_episode_steps // 3
+    total_timesteps = max_iterations * avg_episode_steps
+
+    environment = make_environment(level, max_episode_steps, seed=seed)
+    eval_env = make_environment(level, max_episode_steps, seed=seed + 1)
+    agent = AgentFactory.create_dqn_agent(
+        environment, params, seed=seed, total_timesteps=total_timesteps
     )
 
-    while total_iterations < max_iterations:
-        chunk = min(eval_interval, max_iterations - total_iterations)
-        run_training(
-            agent,
-            level,
-            chunk,
-            goal_reward=goal_reward,
-            seed=seed,
-            max_episode_steps=max_episode_steps,
-            verbose=False,
-            reset=(total_iterations == 0),
-        )
-        total_iterations += chunk
+    eval_interval = eval_interval_episodes * avg_episode_steps
 
-        seed_everything(seed + 1)
-        eval_env = make_environment(level, max_episode_steps, seed=seed)
-        eval_rewards = evaluate_model(agent, eval_env, n_eval_episodes=n_eval_episodes)
-        eval_env.close()
+    callback = AdaptiveStopCallback(
+        eval_env=eval_env,
+        goal_reward=goal_reward,
+        eval_interval=eval_interval,
+        n_eval_episodes=n_eval_episodes,
+        plateau_patience=plateau_patience,
+        plateau_threshold=plateau_threshold,
+        success_threshold=success_threshold,
+        success_window=success_window,
+        verbose=True,
+    )
 
-        eval_mean = sum(eval_rewards) / len(eval_rewards)
-        eval_means.append(eval_mean)
-        eval_steps.append(total_iterations)
+    agent.learn(
+        total_timesteps=total_timesteps,
+        callback=callback,
+        reset_num_timesteps=True,
+    )
 
-        print(
-            f"  [{total_iterations}/{max_iterations}] eval_mean={eval_mean:.1f} "
-            f"best={best_eval:.1f} stall={stall_count}/{plateau_window} "
-            f"solved={solved_count}/{solved_window}"
-        )
+    environment.close()
+    eval_env.close()
 
-        # Check solved
-        if eval_mean >= solved_threshold:
-            solved_count += 1
-            if solved_count >= solved_window:
-                print(
-                    f"Solved! eval_mean={eval_mean:.1f} >= {solved_threshold} "
-                    f"for {solved_window} consecutive evals"
-                )
-                break
-        else:
-            solved_count = 0
-
-        # Check plateau
-        if eval_mean > best_eval + plateau_threshold:
-            best_eval = eval_mean
-            stall_count = 0
-        else:
-            stall_count += 1
-            if stall_count >= plateau_window:
-                print(
-                    f"Stalled — no improvement > {plateau_threshold} "
-                    f"over {plateau_window} evals (best={best_eval:.1f})"
-                )
-                break
-
-    else:
-        print(f"Reached max_iterations={max_iterations}")
-
-    return eval_means, eval_steps, agent
+    return agent, callback.eval_history
