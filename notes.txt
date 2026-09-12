@@ -1,6 +1,6 @@
 TODO:
-- get rid of the narrow parameter, always use overrides
-- rename limit to search_iterations
-- rename iterations to training_iterations
+- train_adaptive? Consolidate to single training model
+- cleanup CLI
+- cleanup README
 - tau
 - testing

@@ -30,18 +30,10 @@ def test_randomization_loop() -> None:
 
 
 def test_exponent_range() -> None:
-    range = Hyperparameters.random_range_exponential(-6, -3)
+    value = Hyperparameters.random_log_uniform(-6, -3)
 
-    assert range[1] >= range[0]
-    assert 1e-6 < range[0]
-    assert range[1] < 9e-3
-
-
-def test_decay() -> None:
-    decay = Hyperparameters.random_decay()
-
-    assert 0.8 < decay
-    assert decay < 1
+    assert 1e-6 < value
+    assert value < 9e-3
 
 
 def test_decay_calc() -> None:

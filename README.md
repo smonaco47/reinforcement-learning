@@ -107,7 +107,7 @@ python -m src.cli train
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--level` | `LunarLander-v3` | Gymnasium environment ID |
-| `--iterations` | `1500` | Training iterations |
+| `--training_iterations` | `1500` | Training iterations |
 | `--goal-reward` | `200` | Reward threshold to count as goal hit |
 | `--seed` | `0` | Random seed |
 | `--max-episode-steps` | `750` | Max steps per episode |
@@ -115,7 +115,7 @@ python -m src.cli train
 
 ```powershell
 # CartPole
-python -m src.cli train --level CartPole-v1 --iterations 500 --goal-reward 400 --max-episode-steps 400
+python -m src.cli train --level CartPole-v1 --training_iterations 500 --goal-reward 400 --max-episode-steps 400
 ```
 
 ---
@@ -131,28 +131,27 @@ python -m src.cli grid-search
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--level` | `LunarLander-v3` | Gymnasium environment ID |
-| `--iterations` | `1500` | Training iterations per run |
-| `--limit` | `300` | Number of runs (0 = unlimited) |
+| `--training_iterations` | `1500` | Training iterations per run |
+| `--search_iterations` | `300` | Number of runs (0 = unlimited) |
 | `--max-episode-steps` | `750` | Max steps per episode |
 | `--goal-reward` | `200` | Reward threshold to count as goal hit |
 | `--n-eval-episodes` | `25` | Episodes for deterministic evaluation |
 | `--output-folder` | `output` | Folder to write CSV results |
 | `--seed` | random | Base random seed |
-| `--narrow/--no-narrow` | `--no-narrow` | Use narrowed hyperparameter ranges |
-| `--lr-initial-min` | `5e-4` | `lr_initial` lower bound (narrow mode) |
-| `--lr-initial-max` | `1e-2` | `lr_initial` upper bound (narrow mode) |
-| `--discount-min` | `0.95` | `discount` lower bound (narrow mode) |
-| `--discount-max` | `1.0` | `discount` upper bound (narrow mode) |
+| `--lr-initial-min` | `5e-4` | `lr_initial` lower bound |
+| `--lr-initial-max` | `1e-2` | `lr_initial` upper bound |
+| `--discount-min` | `0.95` | `discount` lower bound |
+| `--discount-max` | `1.0` | `discount` upper bound |
 
 ```powershell
 # unlimited runs
-python -m src.cli grid-search --limit 0
+python -m src.cli grid-search --training_iterations 0
 
 # longer training per run — recommended for better convergence
-python -m src.cli grid-search --iterations 3000 --limit 100
+python -m src.cli grid-search --training_iterations 3000 --search_iterations 100
 
 # narrow search with high discount — the most effective configuration found
-python -m src.cli grid-search --iterations 3000 --narrow --discount-min 0.98 --discount-max 1.0
+python -m src.cli grid-search --training_iterations 3000 --discount-min 0.98 --discount-max 1.0
 ```
 
 ---
@@ -257,11 +256,11 @@ python -m src.cli run-model output/model_gs_12345_eval210 --no-watch --n-eval-ep
 
 ## Recommended workflow
 
-1. **Wide search** — run `grid-search --iterations 3000` for 100-200 iterations. Models that hit `eval_mean >= 200` are saved automatically.
+1. **Wide search** — run `grid-search --training_iterations 3000` for 100-200 iterations. Models that hit `eval_mean >= 200` are saved automatically.
 
 2. **Analyze** — run `analyze` to generate `consolidated_output.csv` and scatter plots. Sort by `eval_mean` to find the best configs. Look for hyperparameters that correlate with high scores.
 
-3. **Narrow search** — run `grid-search --narrow` with the ranges from step 2. `--discount-min 0.98` is strongly recommended based on empirical results — high discount is the clearest signal for LunarLander.
+3. **Optional overrides** — run `grid-search` with the ranges from step 2. `--discount-min 0.98` is strongly recommended based on results.
 
 4. **Adaptive re-training** — use `train-from-csv` on your best rows to train longer with automatic stopping. Each run saves a model, summary, and progress plot.
 
@@ -282,7 +281,7 @@ Through empirical grid search, the most important hyperparameters for LunarLande
 - **`discount >= 0.98`** — the single strongest signal. LunarLander requires long-horizon planning to connect early stabilization to the final landing reward. Low discount prevents the agent from learning this.
 - **`lr_initial` in `[5e-4, 1e-2]`** — values below `1e-4` consistently fail to learn.
 - **`memory >= 50000`** — smaller buffers get overwritten too quickly for stable learning.
-- **`iterations >= 3000`** — 1500 iterations is often not enough to converge.
+- **`training_iterations >= 3000`** — 1500 iterations is often not enough to converge.
 
 ### Algorithm
 
@@ -320,4 +319,4 @@ Third-party libraries (SB3, gymnasium, matplotlib, numpy) don't ship complete st
 
 - The original implementation used [Tensorforce](https://github.com/tensorforce/tensorforce), which is no longer maintained and incompatible with Python 3.11+. It was replaced with Stable Baselines3.
 - The original used `gym` (OpenAI). This project uses `gymnasium` (the maintained Farama fork).
-- Several bugs in the original port caused poor grid search performance: exploration fraction was hardcoded to 1500 iterations regardless of actual training length, `train_freq` was tied to `batch_size` causing infrequent updates, the replay buffer minimum was too small at 10k, and a `horizon` parameter was being searched over but had no effect on SB3 DQN. Fixing these dramatically improved results.
+- Several bugs in the original port caused poor grid search performance: exploration fraction was hardcoded to 1500 training iterations regardless of actual training length, `train_freq` was tied to `batch_size` causing infrequent updates, the replay buffer minimum was too small at 10k, and a `horizon` parameter was being searched over but had no effect on SB3 DQN. Fixing these dramatically improved results.

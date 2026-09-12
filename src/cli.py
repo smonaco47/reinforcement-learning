@@ -103,7 +103,7 @@ def cli() -> None:
     help="Gymnasium environment ID",
 )
 @click.option(
-    "--iterations", default=1500, show_default=True, help="Training iterations"
+    "--training_iterations", default=1500, show_default=True, help="Training iterations"
 )
 @click.option(
     "--goal-reward",
@@ -123,7 +123,7 @@ def cli() -> None:
 )
 def train(
     level: str,
-    iterations: int,
+    training_iterations: int,
     goal_reward: float,
     seed: int,
     max_episode_steps: int,
@@ -135,7 +135,7 @@ def train(
     train_model(
         level=level,
         params=params,
-        iterations=iterations,
+        training_iterations=training_iterations,
         goal_reward=goal_reward,
         verbose=True,
         seed=seed,
@@ -155,10 +155,16 @@ def train(
     help="Gymnasium environment ID",
 )
 @click.option(
-    "--iterations", default=1500, show_default=True, help="Training iterations per run"
+    "--training_iterations",
+    default=1500,
+    show_default=True,
+    help="Training iterations per run",
 )
 @click.option(
-    "--limit", default=300, show_default=True, help="Number of runs (0 = unlimited)"
+    "--search_iterations",
+    default=300,
+    show_default=True,
+    help="Number of runs (0 = unlimited)",
 )
 @click.option(
     "--max-episode-steps", default=750, show_default=True, help="Max steps per episode"
@@ -185,45 +191,38 @@ def train(
     "--seed", default=None, type=int, help="Base random seed (default: random)"
 )
 @click.option(
-    "--narrow/--no-narrow",
-    default=False,
-    show_default=True,
-    help="Use narrowed hyperparameter ranges",
-)
-@click.option(
     "--lr-initial-min",
     default=5e-4,
     show_default=True,
-    help="lr_initial lower bound (narrow mode)",
+    help="lr_initial lower bound",
 )
 @click.option(
     "--lr-initial-max",
     default=1e-2,
     show_default=True,
-    help="lr_initial upper bound (narrow mode)",
+    help="lr_initial upper bound",
 )
 @click.option(
     "--discount-min",
     default=0.95,
     show_default=True,
-    help="discount lower bound (narrow mode)",
+    help="discount lower bound",
 )
 @click.option(
     "--discount-max",
     default=1.0,
     show_default=True,
-    help="discount upper bound (narrow mode)",
+    help="discount upper bound",
 )
 def grid_search(
     level: str,
-    iterations: int,
-    limit: int,
+    training_iterations: int,
+    search_iterations: int,
     max_episode_steps: int,
     goal_reward: float,
     n_eval_episodes: int,
     output_folder: str,
     seed: int | None,
-    narrow: bool,
     lr_initial_min: float,
     lr_initial_max: float,
     discount_min: float,
@@ -234,9 +233,8 @@ def grid_search(
     os.makedirs(output_folder, exist_ok=True)
 
     click.echo(
-        f"Starting grid search — level={level}, iterations={iterations}, "
-        f"limit={'unlimited' if limit == 0 else limit}, base_seed={base_seed}, "
-        f"mode={'narrow' if narrow else 'wide'}"
+        f"Starting grid search — level={level}, training_iterations={training_iterations}, "
+        f"search_iterations={'unlimited' if search_iterations == 0 else search_iterations}, base_seed={base_seed}"
     )
 
     params = Hyperparameters()
@@ -246,11 +244,11 @@ def grid_search(
         f"{output_folder}/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", "w"
     ) as out_file:
         out_file.write(
-            f"seed,{Hyperparameters.csv_header()},{Results.csv_header(iterations)}\n"
+            f"seed,{Hyperparameters.csv_header()},{Results.csv_header(training_iterations)}\n"
         )
         out_file.flush()
 
-        while limit == 0 or i < limit:
+        while search_iterations == 0 or i < search_iterations:
             try:
                 i += 1
                 run_seed = base_seed + i
@@ -258,19 +256,16 @@ def grid_search(
                     f"{datetime.now().strftime('%H:%M:%S')}\t{i}\tSEED: {run_seed}"
                 )
 
-                if narrow:
-                    params.randomize_narrow(
-                        steps=iterations,
-                        lr_initial_range=(lr_initial_min, lr_initial_max),
-                        discount_range=(discount_min, discount_max),
-                    )
-                else:
-                    params.randomize(iterations)
+                params.randomize(
+                    steps=training_iterations,
+                    lr_initial_range=(lr_initial_min, lr_initial_max),
+                    discount_range=(discount_min, discount_max),
+                )
 
                 result, agent = train_model(
                     level=level,
                     params=params,
-                    iterations=iterations,
+                    training_iterations=training_iterations,
                     goal_reward=goal_reward,
                     verbose=False,
                     seed=run_seed,

@@ -2,11 +2,6 @@ import math
 import random
 
 
-def log_uniform(low: float, high: float) -> float:
-    """Sample uniformly in log space — gives equal probability to each order of magnitude."""
-    return math.exp(random.uniform(math.log(low), math.log(high)))
-
-
 class Hyperparameters:
     lr_initial: float = 1e-3
     lr_final: float = 1e-4
@@ -24,27 +19,7 @@ class Hyperparameters:
     memory: int = 50_000
     discount: float = 1.0
 
-    def randomize(self, steps: int = 1000) -> None:
-        lr_range = self.random_range_exponential(-6, -3)
-        self.lr_initial = lr_range[1]
-        self.lr_final = lr_range[0]
-        self.lr_steps = random.randrange(max(1, steps))
-        self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
-
-        explore_range = self.random_range(0.01, 0.3)
-        self.explore_initial = explore_range[1]
-        self.explore_final = explore_range[0] / 10
-        self.explore_steps = random.randrange(max(1, steps))
-        self.explore_decay = self.calc_decay(
-            self.explore_initial, self.explore_final, self.explore_steps
-        )
-
-        self.discount = random.choice([x / 100 for x in range(90, 101)])
-
-        self.batch_size = 2 ** random.randint(4, 8)
-        self.memory = random.choice([50_000, 100_000, 200_000])
-
-    def randomize_narrow(
+    def randomize(
         self,
         steps: int = 1000,
         lr_initial_range: tuple[float, float] = (1e-5, 1e-3),
@@ -55,17 +30,16 @@ class Hyperparameters:
         batch_sizes: tuple[int, ...] = (32, 64, 128),
         memories: tuple[int, ...] = (50000, 100000, 200000),
     ) -> None:
-        """Second-stage randomization with narrowed bounds based on first-stage results."""
-        self.lr_initial = log_uniform(*lr_initial_range)
-        self.lr_final = log_uniform(*lr_final_range)
+        self.lr_initial = self.random_log_uniform(*lr_initial_range)
+        self.lr_final = self.random_log_uniform(*lr_final_range)
         if self.lr_final >= self.lr_initial:
             self.lr_final = self.lr_initial / 10
 
         self.lr_steps = random.randrange(max(1, steps))
         self.lr_decay = self.calc_decay(self.lr_initial, self.lr_final, self.lr_steps)
 
-        self.explore_initial = log_uniform(*explore_initial_range)
-        self.explore_final = log_uniform(*explore_final_range)
+        self.explore_initial = self.random_log_uniform(*explore_initial_range)
+        self.explore_final = self.random_log_uniform(*explore_final_range)
         if self.explore_final >= self.explore_initial:
             self.explore_final = self.explore_initial / 10
 
@@ -83,16 +57,9 @@ class Hyperparameters:
         return (final / initial) ** (1 / steps)
 
     @classmethod
-    def random_range(cls, lower: float, upper: float) -> tuple[float, float]:
-        values = (random.uniform(lower, upper), random.uniform(lower, upper))
-        return (min(values), max(values))
-
-    @classmethod
-    def random_range_exponential(cls, lower: int, upper: int) -> tuple[float, float]:
-        low = 10.0**lower
-        high = 10.0**upper
-        values = (log_uniform(low, high), log_uniform(low, high))
-        return (min(values), max(values))
+    def random_log_uniform(cls, low: float, high: float) -> float:
+        """Sample uniformly in log space — gives equal probability to each order of magnitude."""
+        return math.exp(random.uniform(math.log(low), math.log(high)))
 
     @classmethod
     def csv_header(cls) -> str:
@@ -123,8 +90,3 @@ class Hyperparameters:
         params.batch_size = int(val[11])
         params.memory = int(val[12])
         return params
-
-    @classmethod
-    def random_decay(cls) -> float:
-        num = f"0.{random.randrange(8, 10)}{random.randrange(10)}{random.randrange(10)}{random.randrange(10)}"
-        return float(num)

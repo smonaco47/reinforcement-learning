@@ -58,7 +58,7 @@ def evaluate_model(
 def run_training(
     agent: DQN,
     level: str,
-    iterations: int,
+    training_iterations: int,
     goal_reward: float = 200,
     seed: int = 0,
     max_episode_steps: int = 750,
@@ -69,10 +69,10 @@ def run_training(
     environment = make_environment(level, max_episode_steps, seed=seed)
     result = Results()
     callback = HitGoalCallback(result, goal_reward, verbose=verbose)
-    avg_episode_steps = max_episode_steps // 3
+    avg_episode_steps = convert_max_steps_to_avg_steps(max_episode_steps)
     agent.set_env(environment)
     agent.learn(
-        total_timesteps=iterations * avg_episode_steps,
+        total_timesteps=training_iterations * avg_episode_steps,
         callback=callback,
         reset_num_timesteps=reset,
         progress_bar=verbose,
@@ -124,7 +124,7 @@ def eval_and_watch(
 def train_model(
     level: str,
     params: Hyperparameters,
-    iterations: int = 1500,
+    training_iterations: int = 1500,
     goal_reward: float = 200,
     verbose: bool = False,
     seed: int = 0,
@@ -133,8 +133,8 @@ def train_model(
 ) -> tuple[Results, DQN]:
     seed_everything(seed)
 
-    avg_episode_steps = max_episode_steps // 3
-    total_timesteps = iterations * avg_episode_steps
+    avg_episode_steps = convert_max_steps_to_avg_steps(max_episode_steps)
+    total_timesteps = training_iterations * avg_episode_steps
 
     environment = make_environment(level, max_episode_steps, seed=seed)
     agent = AgentFactory.create_dqn_agent(
@@ -145,7 +145,7 @@ def train_model(
     result = run_training(
         agent,
         level,
-        iterations,
+        training_iterations,
         goal_reward=goal_reward,
         seed=seed,
         max_episode_steps=max_episode_steps,
@@ -171,7 +171,7 @@ def train_model(
 def continue_training(
     agent: DQN,
     level: str,
-    iterations: int,
+    training_iterations: int,
     goal_reward: float = 200,
     seed: int = 0,
     max_episode_steps: int = 750,
@@ -180,7 +180,7 @@ def continue_training(
     return run_training(
         agent,
         level,
-        iterations,
+        training_iterations,
         goal_reward=goal_reward,
         seed=seed,
         max_episode_steps=max_episode_steps,
@@ -282,7 +282,7 @@ def train_adaptive(
     """
     seed_everything(seed)
 
-    avg_episode_steps = max_episode_steps // 3
+    avg_episode_steps = convert_max_steps_to_avg_steps(max_episode_steps)
     total_timesteps = max_iterations * avg_episode_steps
 
     environment = make_environment(level, max_episode_steps, seed=seed)
@@ -315,3 +315,7 @@ def train_adaptive(
     eval_env.close()
 
     return agent, callback.eval_history
+
+def convert_max_steps_to_avg_steps(max_steps: int) -> int:
+    # Rough approximation for the average case
+    return max_steps // 3
