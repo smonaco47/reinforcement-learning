@@ -1,38 +1,12 @@
 from typing import Any, Callable
 
 from stable_baselines3 import DQN
-from stable_baselines3.common.callbacks import BaseCallback
 
 from src.hyperparameters import Hyperparameters
-from src.results import Results
 
 # Fixed train frequency — decoupled from batch_size.
 # SB3 default is 4; tying it to batch_size means large batches update very infrequently.
 TRAIN_FREQ = 4
-
-
-class HitGoalCallback(BaseCallback):
-    """Callback that tracks goal hits and episode rewards into a Results object."""
-
-    def __init__(
-        self, results: Results, goal_reward: float, verbose: bool = False
-    ) -> None:
-        super().__init__(verbose)
-        self.results = results
-        self.goal_reward = goal_reward
-        self._episode_reward: float = 0.0
-
-    def _on_step(self) -> bool:
-        reward: float = float(self.locals["rewards"][0])
-        done: bool = bool(self.locals["dones"][0])
-        self._episode_reward += reward
-
-        if done:
-            hit_goal = self._episode_reward >= self.goal_reward
-            self.results.add_result(self._episode_reward, hit_goal)
-            self._episode_reward = 0.0
-
-        return True
 
 
 class AgentFactory:

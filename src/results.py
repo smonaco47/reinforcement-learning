@@ -1,68 +1,46 @@
-from datetime import datetime
+from dataclasses import dataclass
+
+
+@dataclass
+class EvalHistory:
+    num_timestamps: int
+    mean: float
+    std: float
+    hit_pct: float
 
 
 class Results:
     def __init__(self) -> None:
-        self.results: list[float] = []
         self.hit_goal: int = 0
-        self.eval_mean: float | None = None
-        self.eval_std: float | None = None
-        self.eval_hit_pct: float | None = None
-
-    def add_result(self, result: float, hit_goal: bool = False) -> None:
-        self.results.append(result)
-        if hit_goal:
-            self.hit_goal += 1
-
-    def add_eval(self, eval_rewards: list[float], goal_reward: float) -> None:
-        self.eval_mean = sum(eval_rewards) / len(eval_rewards)
-        self.eval_std = (
-            sum((r - self.eval_mean) ** 2 for r in eval_rewards) / len(eval_rewards)
-        ) ** 0.5
-        self.eval_hit_pct = (
-            sum(1 for r in eval_rewards if r >= goal_reward) / len(eval_rewards) * 100
-        )
-
-    def print_summary(self) -> None:
-        len_results = len(self.results)
-        rewards_to_print = min(len_results, 100)
-        avg_rewards = (
-            sum(self.results[len_results - rewards_to_print : -1]) / rewards_to_print
-        )
-        print(f"{datetime.now().strftime('%H:%M:%S')}\t{len_results}\t{avg_rewards}")
-        if self.eval_mean is not None:
-            print(
-                f"Eval mean: {self.eval_mean:.2f} +/- {self.eval_std:.2f} | Goal hit: {self.eval_hit_pct:.0f}%"
-            )
+        self.eval_history: list[EvalHistory] = []
 
     @classmethod
-    def csv_header(cls, iterations: int) -> str:
-        step_size = iterations // 25
+    def csv_header(cls, n_expected_evals: int) -> str:
         headers = [
-            "max",
-            "max_group",
-            "hit_goal",
-            "eval_mean",
-            "eval_std",
-            "eval_hit_pct",
+            "final_eval_mean",
+            "final_eval_std",
+            "final_eval_hit_pct",
         ]
-        headers.extend(str(i) for i in range(step_size, iterations + 1, step_size))
+        headers.extend(str(i) for i in range(n_expected_evals))
         return ",".join(headers)
 
     def csv_result(self) -> str:
-        len_results = len(self.results)
-        step_size = len_results // 25
-        buckets = [
-            sum(self.results[i : i + step_size]) / step_size
-            for i in range(0, len_results, step_size)
-        ]
+        final_eval_history = self.eval_history[-1]
         values: list[float | int] = [
-            max(self.results),
-            max(buckets),
-            self.hit_goal,
-            self.eval_mean if self.eval_mean is not None else 0.0,
-            self.eval_std if self.eval_std is not None else 0.0,
-            self.eval_hit_pct if self.eval_hit_pct is not None else 0.0,
+            final_eval_history.mean,
+            final_eval_history.std,
+            final_eval_history.hit_pct,
         ]
-        values.extend(buckets)
+        values.extend(e.mean for e in self.eval_history)
         return ",".join(str(v) for v in values)
+
+
+def calculate_eval_reward_stats(
+    eval_rewards: list[float], goal_reward: float
+) -> EvalHistory:
+    eval_mean = sum(eval_rewards) / len(eval_rewards)
+    eval_std = (
+        sum((r - eval_mean) ** 2 for r in eval_rewards) / len(eval_rewards)
+    ) ** 0.5
+    hit_pct = sum(1 for r in eval_rewards if r >= goal_reward) / len(eval_rewards) * 100
+    return EvalHistory(len(eval_rewards), eval_mean, eval_std, hit_pct)

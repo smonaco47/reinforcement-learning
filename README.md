@@ -124,6 +124,12 @@ python -m src.cli train --level CartPole-v1 --training_iterations 500 --goal-rew
 
 Trains many agents with randomized hyperparameters and writes results to timestamped CSVs in `output/`. Any run where `eval_mean >= goal_reward` has its model saved automatically to `output/model_gs_<seed>_eval<score>.zip`.
 
+
+The run will execute with automatic stopping
+- **Plateau** — `eval_mean` hasn't improved by `--plateau-threshold` in `--plateau-patience` consecutive evals
+- **Solved** — `eval_mean` has stayed above `--goal-reward` for `--success-window` consecutive evals
+- **Hard cap** — `--training-iterations` is reached regardless
+
 ```powershell
 python -m src.cli grid-search
 ```
@@ -131,10 +137,14 @@ python -m src.cli grid-search
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--level` | `LunarLander-v3` | Gymnasium environment ID |
-| `--training_iterations` | `1500` | Training iterations per run |
-| `--search_iterations` | `300` | Number of runs (0 = unlimited) |
+| `--search-iterations` | `300` | Number of runs (0 = unlimited) |
+| `--training-iterations` | `1500` | Training iterations per run |
+| `--plateau-patience` | `10` | Evals with no improvement before stopping |
+| `--plateau-threshold` | `20` | Min improvement to not count as plateau — set higher than eval noise (~30-50 pts) |
+| `--success-window` | `5` | Consecutive solved evals before stopping |
 | `--max-episode-steps` | `750` | Max steps per episode |
 | `--goal-reward` | `200` | Reward threshold to count as goal hit |
+| `--eval-interval` | `100` | Episodes between eval checkpoints |
 | `--n-eval-episodes` | `25` | Episodes for deterministic evaluation |
 | `--output-folder` | `output` | Folder to write CSV results |
 | `--seed` | random | Base random seed |
@@ -169,58 +179,6 @@ python -m src.cli analyze
 | `--output-folder` | `output` | Folder containing CSV results |
 | `--no-plot` | off | Skip plotting, just consolidate |
 | `--no-save` | off | Skip saving consolidated CSV, just plot |
-
-```powershell
-# just consolidate, no plot
-python -m src.cli analyze --no-plot
-```
-
----
-
-### `train-from-csv` — adaptive training from CSV rows
-
-Re-trains rows from `consolidated_output.csv` with automatic early stopping — no need to guess how many iterations to run. Training stops when:
-
-- **Plateau** — `eval_mean` hasn't improved by `--plateau-threshold` in `--plateau-patience` consecutive evals
-- **Solved** — `eval_mean` has stayed above `--success-threshold` for `--success-window` consecutive evals
-- **Hard cap** — `--max-iterations` is reached regardless
-
-Copy any rows you want to re-train from `consolidated_output.csv` into a new file (keep the header row), then run:
-
-```powershell
-python -m src.cli train-from-csv output/my_best_rows.csv
-```
-
-Each run gets its own output directory `output/train_from_csv_<seed>_<timestamp>/` containing:
-- `model_eval<score>.zip` — the trained model
-- `results.txt` — eval summary and hyperparameters
-- `eval_progress.png` — plot of eval_mean over training timesteps (saved to file, not opened)
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `INPUT_FILE` | — | CSV file with rows from `consolidated_output.csv` (header required) |
-| `--level` | `LunarLander-v3` | Gymnasium environment ID |
-| `--output-folder` | `output` | Folder for models and plots |
-| `--max-episode-steps` | `750` | Max steps per episode |
-| `--goal-reward` | `200` | Reward threshold |
-| `--n-eval-episodes` | `50` | Episodes per eval checkpoint — higher values give more stable signal |
-| `--eval-interval` | `100` | Episodes between eval checkpoints |
-| `--plateau-patience` | `10` | Evals with no improvement before stopping |
-| `--plateau-threshold` | `20.0` | Min improvement to not count as plateau — set higher than eval noise (~30-50 pts) |
-| `--success-threshold` | `250.0` | eval_mean above this counts as solved |
-| `--success-window` | `5` | Consecutive solved evals before stopping |
-| `--max-iterations` | `10000` | Hard cap on training iterations |
-| `--seed` | from CSV | Override the seed from the CSV row |
-
-```powershell
-# train with defaults
-python -m src.cli train-from-csv output/my_best_rows.csv
-
-# more conservative stopping — good for runs that are close but not consistent
-python -m src.cli train-from-csv output/my_best_rows.csv --plateau-patience 15 --plateau-threshold 20 --n-eval-episodes 50
-```
-
-**Note on plateau threshold:** With 25 eval episodes, `eval_mean` has a natural variance of 30-50 points between checkpoints even when the policy hasn't changed. Set `--plateau-threshold` above this noise floor — `20.0` is a reasonable minimum, and increasing `--n-eval-episodes` to 50-100 gives a more stable signal that makes lower thresholds meaningful.
 
 ---
 
@@ -260,11 +218,9 @@ python -m src.cli run-model output/model_gs_12345_eval210 --no-watch --n-eval-ep
 
 2. **Analyze** — run `analyze` to generate `consolidated_output.csv` and scatter plots. Sort by `eval_mean` to find the best configs. Look for hyperparameters that correlate with high scores.
 
-3. **Optional overrides** — run `grid-search` with the ranges from step 2. `--discount-min 0.98` is strongly recommended based on results.
+3. **Optional overrides** — run `grid-search` with the ranges from step 2.
 
-4. **Adaptive re-training** — use `train-from-csv` on your best rows to train longer with automatic stopping. Each run saves a model, summary, and progress plot.
-
-5. **Evaluate** — use `run-model` on saved models to watch the agent land and get a reliable eval score over more episodes.
+4. **Evaluate** — use `run-model` on saved models to watch the agent land and get a reliable eval score over more episodes.
 
 ---
 
@@ -295,7 +251,6 @@ The agent uses [DQN](https://stable-baselines3.readthedocs.io/en/master/modules/
 - **`train_model`** — creates the agent, calls `run_training(reset=True)`, then evaluates. Used by `grid-search` and `train`.
 - **`train_adaptive`** — creates an agent and runs `agent.learn` with `AdaptiveStopCallback`, which stops on plateau or consistent success. Used by `train-from-csv`.
 - **`eval_and_watch`** — deterministic evaluation and optional rendering, used by `train_model` and `run-model`.
-- **`continue_training`** — thin wrapper around `run_training(reset=False)` for continuing from a checkpoint.
 
 ### Reproducibility
 
@@ -305,7 +260,7 @@ All sources of randomness are seeded via `seed_everything`: Python's `random`, N
 
 LunarLander-v3 is considered solved at a mean reward of **200** over 100 consecutive episodes. The `eval_hit_pct` column records the percentage of deterministic eval episodes that hit this threshold — a more reliable signal than `eval_mean` alone since a high mean can hide inconsistency.
 
-## Type checking
+## Type checking & Linting
 
 All source files are typed and checked with mypy strict mode:
 
@@ -313,7 +268,12 @@ All source files are typed and checked with mypy strict mode:
 poetry run mypy src/
 ```
 
-Third-party libraries (SB3, gymnasium, matplotlib, numpy) don't ship complete stubs so `ignore_missing_imports = true` is set in `pyproject.toml`. `warn_return_any = false` is also set to allow `Any` in places where SB3/gymnasium interfaces require it.
+Also, all files are formatted using ruff:
+
+```powershell
+poetry run ruff format
+poetry run ruff check --fix
+```
 
 ## Notes
 

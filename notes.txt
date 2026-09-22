@@ -1,6 +1,0 @@
-TODO:
-- train_adaptive? Consolidate to single training model
-- cleanup CLI
-- cleanup README
-- tau
-- testing

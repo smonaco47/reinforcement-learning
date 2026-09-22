@@ -17,16 +17,14 @@ from src.hyperparameters import Hyperparameters
 from src.results import Results
 from src.train_model import (
     eval_and_watch,
-    evaluate_model,
     make_environment,
     seed_everything,
     train_adaptive,
-    train_model,
 )
 
 # --- Constants ---
 
-SKIP_FILES = {"consolidated_output.csv", "output_for_dt.csv", "best_simplified.csv"}
+SKIP_FILES = {"consolidated_output.csv"}
 
 KEEP_COLUMNS = [
     "seed",
@@ -107,7 +105,7 @@ def cli() -> None:
 )
 @click.option(
     "--goal-reward",
-    default=200.0,
+    default=250.0,
     show_default=True,
     help="Reward threshold to count as goal hit",
 )
@@ -121,6 +119,12 @@ def cli() -> None:
     show_default=True,
     help="Episodes for deterministic evaluation",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    type=bool,
+    help="show detailed debugging information",
+)
 def train(
     level: str,
     training_iterations: int,
@@ -128,16 +132,17 @@ def train(
     seed: int,
     max_episode_steps: int,
     n_eval_episodes: int,
+    verbose: bool,
 ) -> None:
     """Train a single DQN agent with randomized hyperparameters."""
     params = Hyperparameters()
     params.randomize()
-    train_model(
+    train_adaptive(
         level=level,
         params=params,
-        training_iterations=training_iterations,
-        goal_reward=goal_reward,
-        verbose=True,
+        max_iterations=training_iterations,
+        success_threshold=goal_reward,
+        verbose=verbose,
         seed=seed,
         max_episode_steps=max_episode_steps,
         n_eval_episodes=n_eval_episodes,
@@ -155,25 +160,49 @@ def train(
     help="Gymnasium environment ID",
 )
 @click.option(
-    "--training_iterations",
+    "--search-iterations",
+    default=300,
+    show_default=True,
+    help="Number of combinations to try (0 = unlimited)",
+)
+@click.option(
+    "--training-iterations",
     default=1500,
     show_default=True,
     help="Training iterations per run",
 )
 @click.option(
-    "--search_iterations",
-    default=300,
+    "--plateau-patience",
+    default=10,
     show_default=True,
-    help="Number of runs (0 = unlimited)",
+    help="Evals with no improvement before stopping",
+)
+@click.option(
+    "--plateau-threshold",
+    default=10,
+    show_default=True,
+    help="Min eval_mean improvement to not count as plateau",
+)
+@click.option(
+    "--success-window",
+    default=5,
+    show_default=True,
+    help="Consecutive evals above success threshold before stopping",
 )
 @click.option(
     "--max-episode-steps", default=750, show_default=True, help="Max steps per episode"
 )
 @click.option(
     "--goal-reward",
-    default=200.0,
+    default=250.0,
     show_default=True,
     help="Reward threshold to count as goal hit",
+)
+@click.option(
+    "--eval-interval",
+    default=100,
+    show_default=True,
+    help="Episodes between eval periods",
 )
 @click.option(
     "--n-eval-episodes",
@@ -214,12 +243,22 @@ def train(
     show_default=True,
     help="discount upper bound",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    type=bool,
+    help="show detailed debugging information",
+)
 def grid_search(
     level: str,
-    training_iterations: int,
     search_iterations: int,
+    training_iterations: int,
+    plateau_patience: int,
+    plateau_threshold: int,
+    success_window: int,
     max_episode_steps: int,
     goal_reward: float,
+    eval_interval: int,
     n_eval_episodes: int,
     output_folder: str,
     seed: int | None,
@@ -227,6 +266,7 @@ def grid_search(
     lr_initial_max: float,
     discount_min: float,
     discount_max: float,
+    verbose: bool,
 ) -> None:
     """Run a random hyperparameter grid search."""
     base_seed = seed if seed is not None else random.randint(0, 1_000_000)
@@ -244,7 +284,7 @@ def grid_search(
         f"{output_folder}/{datetime.now().strftime('%m-%d-%H-%M-%S')}.csv", "w"
     ) as out_file:
         out_file.write(
-            f"seed,{Hyperparameters.csv_header()},{Results.csv_header(training_iterations)}\n"
+            f"seed,{Hyperparameters.csv_header()},{Results.csv_header(training_iterations // eval_interval)}\n"
         )
         out_file.flush()
 
@@ -262,15 +302,19 @@ def grid_search(
                     discount_range=(discount_min, discount_max),
                 )
 
-                result, agent = train_model(
+                result, agent = train_adaptive(
                     level=level,
                     params=params,
-                    training_iterations=training_iterations,
-                    goal_reward=goal_reward,
-                    verbose=False,
                     seed=run_seed,
                     max_episode_steps=max_episode_steps,
                     n_eval_episodes=n_eval_episodes,
+                    eval_interval_episodes=eval_interval,
+                    max_iterations=training_iterations,
+                    verbose=verbose,
+                    plateau_patience=plateau_patience,
+                    plateau_threshold=plateau_threshold,
+                    success_window=success_window,
+                    success_threshold=goal_reward,
                 )
 
                 out_file.write(
@@ -278,12 +322,45 @@ def grid_search(
                 )
                 out_file.flush()
 
-                if result.eval_mean is not None and result.eval_mean >= goal_reward:
-                    model_name = f"{output_folder}/model_gs_{run_seed}_eval{result.eval_mean:.0f}"
+                last_eval = result.eval_history[-1]
+                if last_eval.mean >= goal_reward:
+                    model_name = (
+                        f"{output_folder}/model_gs_{run_seed}_eval{last_eval.mean:.0f}"
+                    )
                     agent.save(model_name)
                     click.echo(
-                        f"  [SAVED] {model_name}.zip (eval_mean={result.eval_mean:.1f})"
+                        f"  [SAVED] {model_name}.zip (eval_mean={last_eval.mean:.1f})"
                     )
+
+                    if result.eval_history:
+                        steps = [h.num_timestamps for h in result.eval_history]
+                        means = [h.mean for h in result.eval_history]
+                        fig, ax = plt.subplots(figsize=(10, 4))
+                        ax.plot(steps, means, marker="o", markersize=3)
+                        ax.axhline(
+                            y=goal_reward,
+                            color="green",
+                            linestyle="--",
+                            label=f"Goal ({goal_reward})",
+                        )
+                        ax.axhline(
+                            y=goal_reward,
+                            color="gold",
+                            linestyle="--",
+                            label=f"Success ({goal_reward})",
+                        )
+                        ax.set_xlabel("Timesteps")
+                        ax.set_ylabel("Eval Mean Reward")
+                        ax.set_title(
+                            f"Training Progress — seed={run_seed} final={last_eval.mean:.0f}"
+                        )
+                        ax.legend()
+                        ax.grid(True)
+                        plt.tight_layout()
+                        plot_path = f"{output_folder}/eval_model_gs_{run_seed}_eval{last_eval.mean:.0f}_progress.png"
+                        plt.savefig(plot_path)
+                        plt.close()
+                        click.echo(f"  Saved plot: {plot_path}")
                 del agent
 
             except Exception as e:
@@ -374,232 +451,6 @@ def analyze(output_folder: str, no_plot: bool, no_save: bool) -> None:
         plt.savefig(fig_path)
         plt.close()
         click.echo(f"Saved {fig_path}")
-
-
-# --- train-from-csv ---
-
-
-@cli.command()
-@click.argument("input-file")
-@click.option(
-    "--level",
-    default="LunarLander-v3",
-    show_default=True,
-    help="Gymnasium environment ID",
-)
-@click.option(
-    "--output-folder",
-    default="output",
-    show_default=True,
-    help="Folder to save models and plots",
-)
-@click.option(
-    "--max-episode-steps", default=750, show_default=True, help="Max steps per episode"
-)
-@click.option(
-    "--goal-reward",
-    default=200.0,
-    show_default=True,
-    help="Reward threshold to count as goal hit",
-)
-@click.option(
-    "--n-eval-episodes",
-    default=25,
-    show_default=True,
-    help="Episodes per evaluation checkpoint",
-)
-@click.option(
-    "--eval-interval",
-    default=100,
-    show_default=True,
-    help="Episodes between eval checkpoints",
-)
-@click.option(
-    "--plateau-patience",
-    default=10,
-    show_default=True,
-    help="Evals with no improvement before stopping",
-)
-@click.option(
-    "--plateau-threshold",
-    default=5.0,
-    show_default=True,
-    help="Min eval_mean improvement to not count as plateau",
-)
-@click.option(
-    "--success-threshold",
-    default=250.0,
-    show_default=True,
-    help="eval_mean above this is considered solved",
-)
-@click.option(
-    "--success-window",
-    default=5,
-    show_default=True,
-    help="Consecutive evals above success threshold before stopping",
-)
-@click.option(
-    "--max-iterations",
-    default=10000,
-    show_default=True,
-    help="Hard cap on training iterations",
-)
-@click.option(
-    "--seed",
-    default=None,
-    type=int,
-    help="Override seed (default: use seed column from CSV)",
-)
-def train_from_csv(
-    input_file: str,
-    level: str,
-    output_folder: str,
-    max_episode_steps: int,
-    goal_reward: float,
-    n_eval_episodes: int,
-    eval_interval: int,
-    plateau_patience: int,
-    plateau_threshold: float,
-    success_threshold: float,
-    success_window: int,
-    max_iterations: int,
-    seed: int | None,
-) -> None:
-    """Train adaptively from rows in a consolidated_output.csv-format file.
-
-    INPUT_FILE is a CSV with rows in consolidated_output.csv format (header required).
-    Copy any rows you want to re-train directly from consolidated_output.csv.
-
-    Stops automatically when stalled or consistently solved. Saves model,
-    results summary, and eval progress plot per run.
-
-    Example:
-
-        python -m src.cli train-from-csv output/my_best_rows.csv
-    """
-    os.makedirs(output_folder, exist_ok=True)
-
-    with open(input_file, "r") as f:
-        reader = csv.reader(f)
-        headers = next(reader)
-        rows = list(reader)
-
-    if not rows:
-        click.echo("[ERROR] No rows found in input file", err=True)
-        raise SystemExit(1)
-
-    missing = [col for col in PARAM_COLS + ["seed"] if col not in headers]
-    if missing:
-        click.echo(f"[ERROR] Input file missing columns: {missing}", err=True)
-        raise SystemExit(1)
-
-    seed_idx = headers.index("seed")
-    param_indices = [headers.index(col) for col in PARAM_COLS]
-
-    click.echo(f"Found {len(rows)} row(s) to train")
-
-    for row_num, row in enumerate(rows, start=1):
-        run_seed = seed if seed is not None else int(row[seed_idx])
-        params_str = ",".join(row[idx] for idx in param_indices)
-        params = Hyperparameters.from_csv(params_str)
-
-        click.echo(
-            f"\n[{row_num}/{len(rows)}] seed={run_seed} "
-            f"lr={params.lr_initial:.2e} discount={params.discount:.3f} "
-            f"batch={params.batch_size} memory={params.memory}"
-        )
-
-        try:
-            agent, eval_history = train_adaptive(
-                level=level,
-                params=params,
-                seed=run_seed,
-                max_episode_steps=max_episode_steps,
-                goal_reward=goal_reward,
-                n_eval_episodes=n_eval_episodes,
-                eval_interval_episodes=eval_interval,
-                plateau_patience=plateau_patience,
-                plateau_threshold=plateau_threshold,
-                success_threshold=success_threshold,
-                success_window=success_window,
-                max_iterations=max_iterations,
-            )
-
-            # Final deterministic eval
-            seed_everything(run_seed + 1)
-            eval_env = make_environment(level, max_episode_steps, seed=run_seed)
-            final_rewards = evaluate_model(
-                agent, eval_env, n_eval_episodes=n_eval_episodes
-            )
-            eval_env.close()
-
-            final_mean = sum(final_rewards) / len(final_rewards)
-            final_std = (
-                sum((r - final_mean) ** 2 for r in final_rewards) / len(final_rewards)
-            ) ** 0.5
-            final_hit_pct = (
-                sum(1 for r in final_rewards if r >= goal_reward)
-                / len(final_rewards)
-                * 100
-            )
-
-            timestamp = datetime.now().strftime("%m-%d-%H-%M-%S")
-            run_dir = f"{output_folder}/train_from_csv_{run_seed}_{timestamp}"
-            os.makedirs(run_dir, exist_ok=True)
-
-            model_path = f"{run_dir}/model_eval{final_mean:.0f}"
-            agent.save(model_path)
-            click.echo(f"  Saved model: {model_path}.zip")
-
-            with open(f"{run_dir}/results.txt", "w") as sf:
-                sf.write(f"Seed:          {run_seed}\n")
-                sf.write(f"Eval mean:     {final_mean:.2f}\n")
-                sf.write(f"Eval std:      {final_std:.2f}\n")
-                sf.write(f"Goal hit %:    {final_hit_pct:.0f}%\n")
-                sf.write(f"Total evals:   {len(eval_history)}\n")
-                sf.write(
-                    f"Final step:    {eval_history[-1][0] if eval_history else 0}\n"
-                )
-                sf.write("\nHyperparameters:\n")
-                for col, idx in zip(PARAM_COLS, param_indices):
-                    sf.write(f"  {col}: {row[idx]}\n")
-
-            click.echo(
-                f"  Final eval: {final_mean:.2f} +/- {final_std:.2f} | Goal hit: {final_hit_pct:.0f}%"
-            )
-
-            if eval_history:
-                steps = [h[0] for h in eval_history]
-                means = [h[1] for h in eval_history]
-                fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(steps, means, marker="o", markersize=3)
-                ax.axhline(
-                    y=goal_reward,
-                    color="green",
-                    linestyle="--",
-                    label=f"Goal ({goal_reward})",
-                )
-                ax.axhline(
-                    y=success_threshold,
-                    color="gold",
-                    linestyle="--",
-                    label=f"Success ({success_threshold})",
-                )
-                ax.set_xlabel("Timesteps")
-                ax.set_ylabel("Eval Mean Reward")
-                ax.set_title(
-                    f"Training Progress — seed={run_seed} final={final_mean:.0f}"
-                )
-                ax.legend()
-                ax.grid(True)
-                plt.tight_layout()
-                plot_path = f"{run_dir}/eval_progress.png"
-                plt.savefig(plot_path)
-                plt.close()
-                click.echo(f"  Saved plot: {plot_path}")
-
-        except Exception as e:
-            click.echo(f"  [ERROR] Failed on row {row_num}: {e}", err=True)
 
 
 # --- run-model ---
