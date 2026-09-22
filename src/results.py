@@ -11,7 +11,6 @@ class EvalHistory:
 
 class Results:
     def __init__(self) -> None:
-        self.hit_goal: int = 0
         self.eval_history: list[EvalHistory] = []
 
     @classmethod

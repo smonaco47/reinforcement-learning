@@ -275,6 +275,14 @@ poetry run ruff format
 poetry run ruff check --fix
 ```
 
+## Testing
+
+The test suite uses pytest. Run the tests using: 
+
+```powershell
+python -m pytest
+```
+
 ## Notes
 
 - The original implementation used [Tensorforce](https://github.com/tensorforce/tensorforce), which is no longer maintained and incompatible with Python 3.11+. It was replaced with Stable Baselines3.

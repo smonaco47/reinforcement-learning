@@ -30,7 +30,7 @@ def test_randomization_loop() -> None:
 
 
 def test_exponent_range() -> None:
-    value = Hyperparameters.random_log_uniform(-6, -3)
+    value = Hyperparameters.random_log_uniform(1e-6, 1e-3)
 
     assert 1e-6 < value
     assert value < 9e-3
